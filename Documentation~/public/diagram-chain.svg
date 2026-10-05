@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+  <defs>
+    <style>
+      .bg { fill: #f5f8fc; }
+      .ink { fill: #16212e; }
+      .muted { fill: #4a5b6d; font-size: 13px; }
+      .k { fill: #1c5fae; font-size: 13px; font-weight: 700; }
+      .anchor { fill: #f2a54a; }
+      .link { fill: #2f7fd6; }
+      .spring { stroke: #78beeB; stroke-width: 3; fill: none; }
+      .soft { stroke: #f2a54a; }
+      .dash { stroke: #7d8fa1; stroke-width: 1.5; stroke-dasharray: 5 5; fill: none; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="640" height="360" rx="14"/>
+  <text class="ink" x="24" y="34" font-size="17" font-weight="800">演示链条：1 个固定吊点 + 5 节弹簧（k 逐节递减）</text>
+  <text class="muted" x="24" y="56">整条链侧偏 38° 释放 → 上硬下软：越往下，形变与速度越明显</text>
+
+  <!-- 吊点 -->
+  <rect class="anchor" x="120" y="86" width="46" height="16" rx="3"/>
+  <text class="muted" x="176" y="100">[0] 吊点 pinned（inverseMass = 0，m = 1.0）</text>
+
+  <!-- 弹簧：锯齿折线，越往下越"松" -->
+  <g>
+    <polyline class="spring" points="143,102 152,112 134,122 152,132 134,142 152,152 143,160"/>
+    <polyline class="spring" points="143,160 154,172 132,184 154,196 132,208 154,220 145,230"/>
+    <polyline class="spring soft" points="145,230 158,244 132,258 158,272 134,284 156,294 148,302"/>
+  </g>
+
+  <!-- 质点 -->
+  <circle class="link" cx="143" cy="160" r="9"/>
+  <circle class="link" cx="145" cy="230" r="9"/>
+  <circle class="link" cx="148" cy="302" r="13"/>
+
+  <!-- 标注 -->
+  <text class="k" x="180" y="140">spring[0]  k = 1600</text>
+  <text class="muted" x="180" y="158">[1] m = 0.8 · 几乎不形变</text>
+  <text class="k" x="180" y="215">spring[1..2]  k = 1100 → 750</text>
+  <text class="muted" x="180" y="233">[2] m = 0.8 · 开始拉长</text>
+  <text class="k" x="180" y="288">spring[3..4]  k = 500 → 320</text>
+  <text class="muted" x="180" y="306">[3..5] m = 0.8 / 1.2 · 摆幅与应变最大（末端球更大）</text>
+
+  <!-- 右侧：参数面板示意 -->
+  <g>
+    <rect x="396" y="86" width="220" height="216" rx="10" fill="#ffffff" stroke="#16212e" stroke-opacity="0.18"/>
+    <text class="ink" x="416" y="112" font-size="14" font-weight="700">MassSpringBehaviour</text>
+    <line class="dash" x1="416" y1="122" x2="596" y2="122"/>
+    <text class="muted" x="416" y="144">gravity = (0, -9.81, 0)</text>
+    <text class="muted" x="416" y="166">globalDamping = 0.6 /s</text>
+    <text class="muted" x="416" y="188">substeps = 8</text>
+    <text class="muted" x="416" y="210">maxDeltaTime = 1/15 s</text>
+    <line class="dash" x1="416" y1="222" x2="596" y2="222"/>
+    <text class="muted" x="416" y="244">particles[6] · springs[5]</text>
+    <text class="muted" x="416" y="266">restLength = 0 → 自动取初始距离</text>
+    <text class="muted" x="416" y="288">FixedUpdate → Step(Time.fixedDeltaTime)</text>
+  </g>
+
+  <text class="muted" x="24" y="344" font-size="12">稳定性核算（最硬一节）：k·h²/m = 1600 × (1/480)² / 0.8 ≈ 0.0087 ≪ 4</text>
+</svg>

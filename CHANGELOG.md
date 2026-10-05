@@ -1,10 +1,20 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0] - 2026-10-05
 
 ### Added
-- 包骨架：`package.json`、`Runtime` / `Editor` / `Tests.Editor` 三个程序集定义、MIT 许可、文档站部署工作流
+- **质点弹簧系统**：`Particle`（位置 / 速度 / 质量 / `inverseMass` / 力累积器 / 粒子阻尼 / 固定标志）、`Spring`（端点索引、原长、刚度 k、轴向阻尼 c）、`MassSpringSystem`（`AddParticle` / `AddSpring` / `Pin` / `Unpin` / `ApplyForces` / `Step` / `ResetToInitial` / `MaxSpeed` / `HasNonFiniteState`）
+- **半隐式（辛）欧拉积分器**：阻尼写成除数 `(1 + c_global·dt)`，任意 `c_global·dt` 都只衰减、绝不反号；粒子级阻尼乘数 `1 - c·dt` 钳到 `[0,1]`
+- **子步与 dt 钳制**：`Step(dt)` 先把 dt 钳到 `maxDeltaTime`（默认 1/15 秒），再均分成 `substeps` 份逐步积分
+- **确定性**：无 `Random` / 无 `Time` / 无并行；同参数、同步数跑两次结果逐位一致
+- **参数校验**：索引越界、质量非有限正数、`dt <= 0`、弹簧两端相同 → 一律 `ArgumentOutOfRangeException`，且抛出前不改动系统状态
+- **Unity 层**：`MassSpringBehaviour`（Inspector 配置、`FixedUpdate` 驱动、Gizmos 按应变着色、右键菜单 `Capture Current As Rest` / `Reset To Initial Layout`）、`MassSpringParticleLink`、`MassSpringBuilder`（配置 → 系统的纯翻译层）
+- **编辑器工具**：`Tools > Physics Simulation > Create Demo Scene / Build In Current Scene / Dump State / Build Chain Only`，静默存盘（不用会弹模态框、把编辑器主线程堵死的 `SaveCurrentModifiedScenesIfUserWantsTo`）
+- **演示场景**：固定吊点 + 5 节链（k 逐节递减 `1600 → 320`）、侧偏 38° 释放、相机与方向光、地面参考线
+- **30 个 EditMode 测试**：积分器闭式解与收敛阶、弹簧力对称性与守恒、系统确定性与稳定性、配置翻译层、演示构建器结构
+- **中英双语文档站**（VitePress，`Documentation~`）+ GitHub Pages 部署工作流
 
-## [1.0.0]
-
-（待发布：质点弹簧 —— 质点、弹簧、半隐式欧拉积分、子步、Gizmos 可视化、编辑器工具、文档站）
+### Notes
+- 包依赖只有 `com.unity.test-framework`，**不依赖 URP** 或任何渲染管线
+- v1 明确不做：刚体、碰撞、刚性距离约束、布料、软体、XPBD、Jobs/Burst 并行、与 `Rigidbody` 互操作；扩展点以 `TODO` 注释标在 `MassSpringSystem` 顶部
+- 计划：1.1.0 布料（XPBD 距离约束）· 1.2.0 软体（把任意网格软体化的组件）· 1.3.0 Jobs + Burst 并行求解

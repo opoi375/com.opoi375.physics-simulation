@@ -1,0 +1,376 @@
+/* ==========================================================================
+   Physics Simulation 文档站自定义主题
+   与 com.opoi375.cartoon-rendering 文档站共用同一套主题（同一批选择器覆写、
+   同一份版式规则），只换配色：设计语言从"赛璐璐卡通"改成"工程蓝图" ——
+   冷白图纸底、深蓝墨描边、蓝图蓝主色 + 琥珀强调色。
+   ========================================================================== */
+
+/* ---------- 设计令牌 ---------- */
+:root {
+  /* 品牌色 */
+  --cr-ink: #16212e;          /* 描边深蓝墨（图纸上的钢笔线） */
+  --cr-cream: #f5f8fc;        /* 冷白图纸底 */
+  --cr-cream-soft: #e9f1fa;   /* 次级底 */
+  --cr-orange: #2f7fd6;       /* 蓝图蓝（主色） */
+  --cr-orange-deep: #1c5fae;
+  --cr-yellow: #f2a54a;       /* 琥珀（强调：弹簧、警示） */
+  --cr-sky: #78beeB;          /* 浅蓝网格线 */
+  --cr-sky-soft: #d8e9f8;
+
+  /* 覆写 VitePress 变量 */
+  --vp-c-brand-1: var(--cr-orange-deep);
+  --vp-c-brand-2: var(--cr-orange);
+  --vp-c-brand-3: var(--cr-yellow);
+  --vp-c-brand-soft: rgba(47, 127, 214, 0.16);
+
+  --vp-c-bg: var(--cr-cream);
+  --vp-c-bg-alt: var(--cr-cream-soft);
+  --vp-c-bg-soft: #eef5fc;
+  --vp-c-bg-elv: #ffffff;
+
+  --vp-c-text-1: var(--cr-ink);
+  --vp-c-text-2: #4a5b6d;
+  --vp-c-text-3: #7d8fa1;
+
+  --vp-c-border: rgba(22, 33, 46, 0.18);
+  --vp-c-divider: rgba(22, 33, 46, 0.12);
+
+  --vp-font-family-base:
+    'Nunito', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Source Han Sans SC', system-ui, sans-serif;
+  --vp-font-family-mono:
+    'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  --vp-border-radius: 14px;
+  --cr-shadow: 5px 5px 0 var(--cr-ink);
+  --cr-shadow-sm: 3px 3px 0 var(--cr-ink);
+}
+
+/* ---------- 深色模式：深蓝夜航 ---------- */
+.dark {
+  --cr-ink: #dce8f5;          /* 深色下描边翻转为浅蓝白 */
+  --vp-c-brand-1: var(--cr-sky);
+  --vp-c-brand-2: var(--cr-orange);
+  --vp-c-brand-soft: rgba(120, 190, 235, 0.14);
+
+  --vp-c-bg: #0f1720;
+  --vp-c-bg-alt: #141d28;
+  --vp-c-bg-soft: #18222e;
+  --vp-c-bg-elv: #1c2733;
+
+  --vp-c-text-1: #e6eef7;
+  --vp-c-text-2: #a9bccd;
+  --vp-c-text-3: #7f95a8;
+
+  --cr-shadow: 5px 5px 0 rgba(0, 0, 0, 0.55);
+  --cr-shadow-sm: 3px 3px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* ---------- 全局：奶油纸底 + 淡网点纹理（漫画半调） ---------- */
+body {
+  background-image: radial-gradient(rgba(22, 33, 46, 0.045) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+.dark body {
+  background-image: radial-gradient(rgba(230, 238, 247, 0.05) 1.2px, transparent 1.2px);
+}
+
+/* ---------- 顶部导航：奶油底 + 粗描边 ---------- */
+.VPNavBar {
+  border-bottom: 3px solid var(--cr-ink) !important;
+}
+.VPNavBar .wrapper .content .curtain::before {
+  background: var(--vp-c-bg) !important;
+}
+.VPNavBar .VPNavBarTitle .title {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.VPNavBar .VPNavBarTitle .logo {
+  border-radius: 22%;
+}
+.VPNavBar .VPNavBarMenuLink,
+.VPNavBar .VPNavBarMenuGroup .button-text {
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 4px 10px;
+  transition: background-color 0.15s ease;
+}
+.VPNavBar .VPNavBarMenuLink:hover,
+.VPNavBar .VPNavBarMenuLink.active {
+  background: var(--cr-sky-soft);
+  color: var(--cr-ink);
+}
+.dark .VPNavBar .VPNavBarMenuLink:hover,
+.dark .VPNavBar .VPNavBarMenuLink.active {
+  background: rgba(120, 190, 235, 0.18);
+  color: var(--vp-c-text-1);
+}
+
+/* ---------- 首页 Hero ---------- */
+.VPHero {
+  padding-top: 56px !important;
+  padding-bottom: 56px !important;
+}
+.VPHero .name,
+.VPHero .text {
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+.VPHero .name {
+  /* 深棕大字 + 橙色描边光晕，漫画标题感 */
+  color: var(--cr-ink);
+  background: none;
+  -webkit-text-fill-color: var(--cr-ink);
+  text-shadow: 4px 4px 0 rgba(47, 127, 214, 0.45);
+}
+.dark .VPHero .name {
+  color: var(--cr-yellow);
+  -webkit-text-fill-color: var(--cr-yellow);
+  text-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
+}
+.VPHero .tagline {
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+  max-width: 640px;
+}
+.VPHero .image-container {
+  /* logo 漂浮动画 + 柔和投影 */
+  filter: drop-shadow(0 12px 24px rgba(22, 33, 46, 0.18));
+}
+.VPHero .image-bg {
+  background: radial-gradient(circle, var(--cr-sky-soft) 0%, rgba(120, 190, 235, 0.35) 45%, transparent 70%) !important;
+  opacity: 1 !important;
+}
+.dark .VPHero .image-bg {
+  background: radial-gradient(circle, rgba(120, 190, 235, 0.25) 0%, rgba(242, 165, 74, 0.12) 45%, transparent 70%) !important;
+}
+.VPHero .VPImage {
+  animation: cr-float 4.5s ease-in-out infinite;
+}
+@keyframes cr-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+/* ---------- 按钮：色块 + 粗描边 + 硬投影，悬停"按压" ---------- */
+.VPButton {
+  border-radius: 999px !important;
+  border: 3px solid var(--cr-ink) !important;
+  font-weight: 800 !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease !important;
+}
+.VPButton.brand {
+  background: var(--cr-orange) !important;
+  color: #fff !important;
+  box-shadow: var(--cr-shadow-sm);
+}
+.VPButton.alt {
+  background: #ffffff !important;
+  color: var(--cr-ink) !important;
+  box-shadow: var(--cr-shadow-sm);
+}
+.dark .VPButton.alt {
+  background: #33291f !important;
+  color: var(--vp-c-text-1) !important;
+}
+.VPButton:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--cr-ink);
+}
+.VPButton:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--cr-ink);
+}
+
+/* ---------- 首页 Features 卡片 ---------- */
+.VPFeatures .VPFeature {
+  border: 3px solid var(--cr-ink) !important;
+  border-radius: 20px !important;
+  background: #fff !important;
+  box-shadow: var(--cr-shadow);
+  padding: 22px !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.dark .VPFeatures .VPFeature {
+  background: var(--vp-c-bg-elv) !important;
+}
+.VPFeatures .VPFeature:hover {
+  transform: translate(-3px, -5px);
+  box-shadow: 8px 10px 0 var(--cr-ink);
+}
+.VPFeatures .VPFeature .icon {
+  font-size: 34px;
+  background: var(--cr-cream-soft);
+  border: 3px solid var(--cr-ink);
+  border-radius: 14px;
+  width: 62px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dark .VPFeatures .VPFeature .icon {
+  background: #3d3128;
+}
+.VPFeatures .VPFeature .title {
+  font-weight: 900 !important;
+}
+.VPFeatures .VPFeature .details {
+  color: var(--vp-c-text-2);
+  font-weight: 500;
+}
+.VPFeatures .VPFeature .link-text .link-text-value {
+  color: var(--cr-orange-deep);
+  font-weight: 800;
+}
+
+/* ---------- 侧边栏 ---------- */
+.VPSidebar {
+  border-right: 3px solid var(--cr-ink) !important;
+}
+.VPSidebar .VPSidebarItem .text {
+  font-weight: 600;
+}
+.VPSidebar .VPSidebarItem.level-0 > .item > .text {
+  font-weight: 800;
+}
+.VPSidebar .VPSidebarItem.is-active > .item .text,
+.VPSidebar .VPSidebarItem .item .text:hover {
+  color: var(--cr-orange-deep) !important;
+}
+.dark .VPSidebar .VPSidebarItem.is-active > .item .text,
+.dark .VPSidebar .VPSidebarItem .item .text:hover {
+  color: var(--cr-yellow) !important;
+}
+.VPSidebar .VPSidebarItem.is-active > .item {
+  background: var(--vp-c-brand-soft);
+  border-radius: 10px;
+}
+
+/* ---------- 正文排版 ---------- */
+.vp-doc h1, .vp-doc h2, .vp-doc h3 {
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+.vp-doc h2 {
+  border-top: none;
+  padding-top: 24px;
+}
+.vp-doc h2::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 22px;
+  margin-right: 10px;
+  border-radius: 5px;
+  background: var(--cr-orange);
+  vertical-align: -3px;
+}
+.vp-doc a {
+  color: var(--cr-orange-deep);
+  font-weight: 700;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.dark .vp-doc a {
+  color: var(--cr-yellow);
+}
+
+/* 表格：卡片化 */
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border: 3px solid var(--cr-ink);
+  border-radius: 14px;
+  overflow: hidden;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--vp-c-bg-elv);
+}
+.vp-doc th {
+  background: var(--cr-cream-soft);
+  font-weight: 800;
+  border-bottom: 3px solid var(--cr-ink);
+}
+.dark .vp-doc th {
+  background: #3d3128;
+}
+.vp-doc th, .vp-doc td {
+  border-right: none;
+  padding: 10px 14px;
+}
+.vp-doc tr:nth-child(2n) {
+  background: transparent;
+}
+.vp-doc td {
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+/* 代码块：深色墨底 + 描边 */
+.vp-doc div[class*='language-'] {
+  border-radius: 14px;
+  border: 3px solid var(--cr-ink);
+  box-shadow: var(--cr-shadow-sm);
+}
+.dark .vp-doc div[class*='language-'] {
+  border-color: rgba(230, 238, 247, 0.25);
+}
+
+/* 引用/提示块 */
+.vp-doc .custom-block {
+  border-radius: 14px;
+  border: 3px solid var(--cr-ink);
+}
+.vp-doc blockquote {
+  border-left: 5px solid var(--cr-orange);
+  background: var(--vp-c-bg-soft);
+  border-radius: 0 12px 12px 0;
+  padding: 10px 16px;
+}
+
+/* ---------- 页脚 / 上一页下一页 ---------- */
+.VPDocFooter .prev-next .pager-link {
+  border: 3px solid var(--cr-ink) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--cr-shadow-sm);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.VPDocFooter .prev-next .pager-link:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 5px 5px 0 var(--cr-ink);
+}
+
+/* ---------- 搜索框 ---------- */
+.VPNavBarSearch .DocSearch-Button {
+  border: 3px solid var(--cr-ink) !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+}
+.dark .VPNavBarSearch .DocSearch-Button {
+  background: var(--vp-c-bg-elv) !important;
+}
+
+/* ---------- 选中文字 ---------- */
+::selection {
+  background: var(--cr-yellow);
+  color: var(--cr-ink);
+}
+.dark ::selection {
+  background: var(--cr-orange);
+  color: #fff;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--cr-orange);
+  border: 3px solid var(--vp-c-bg);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
