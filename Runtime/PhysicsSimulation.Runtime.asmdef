@@ -1,0 +1,14 @@
+{
+    "name": "PhysicsSimulation.Runtime",
+    "rootNamespace": "PhysicsSimulation",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

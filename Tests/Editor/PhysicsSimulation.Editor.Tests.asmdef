@@ -1,0 +1,25 @@
+{
+    "name": "PhysicsSimulation.Editor.Tests",
+    "rootNamespace": "PhysicsSimulation.Editor.Tests",
+    "references": [
+        "PhysicsSimulation.Editor",
+        "PhysicsSimulation.Runtime",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

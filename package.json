@@ -1,0 +1,28 @@
+{
+  "name": "com.opoi375.physics-simulation",
+  "version": "1.0.0",
+  "displayName": "Physics Simulation",
+  "description": "A point-mass & spring physics simulation toolkit for Unity: mass-spring systems solved with semi-implicit Euler + linear damping, substepping for stability, gizmo visualization of particles and springs, and editor tools that build a demo scene in one click.",
+  "unity": "6000.5",
+  "unityRelease": "6f1",
+  "license": "MIT",
+  "author": {
+    "name": "Opoi375"
+  },
+  "dependencies": {
+    "com.unity.test-framework": "1.7.0"
+  },
+  "keywords": [
+    "physics",
+    "simulation",
+    "mass-spring",
+    "particle",
+    "spring",
+    "hooke-law",
+    "integrator",
+    "semi-implicit-euler",
+    "substepping",
+    "gizmos",
+    "editor-tools"
+  ]
+}
