@@ -31,6 +31,12 @@ namespace PhysicsSimulation
         /// <summary>是否被固定（等价于 inverseMass == 0）。</summary>
         public bool pinned;
 
+        /// <summary>初始位置（<see cref="ResetToInitial"/> 回到这里），只读快照。</summary>
+        public Vector3 InitialPosition { get { return initialPosition; } }
+
+        /// <summary>初始速度快照。</summary>
+        public Vector3 InitialVelocity { get { return initialVelocity; } }
+
         // 初始快照，供 ResetToInitial 使用
         internal Vector3 initialPosition;
         internal Vector3 initialVelocity;
