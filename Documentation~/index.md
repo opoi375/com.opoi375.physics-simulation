@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Physics Simulation
-  text: Unity 质点弹簧与布料物理模拟工具包
-  tagline: 确定性求解 · 质点弹簧 + PBD 布料 · 半隐式欧拉与距离约束 · 纯逻辑层可单测 —— 从一根会摆的链子和一面会飘的旗开始学物理模拟
+  text: Unity 质点弹簧、布料与软体物理模拟工具包
+  tagline: 确定性求解 · 质点弹簧 + PBD 布料 + 体积保持软体 · 半隐式欧拉与距离约束 · 纯逻辑层可单测 —— 从一根会摆的链子、一面会飘的旗，到一块会瘪又会鼓回来的果冻
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -17,14 +17,18 @@ hero:
       link: https://github.com/opoi375/com.opoi375.physics-simulation
 
 features:
+  - icon: 🫧
+    title: 软体模拟（v1.2.0）
+    details: 任意网格自动长出拓扑：焊接顶点成质点、三角形边成结构弹簧、共边对顶点成弯曲弹簧，再加散度定理体积约束 —— 压扁了会自己鼓回来，642 质点 2.745 ms/步
+    link: /soft-body/
   - icon: 🚩
     title: 布料模拟（v1.1.0）
     details: 结构 / 剪切 / 弯曲三类距离约束，PBD 投影求解，硬度与步长解耦，stiffness=1 也不炸；风、球体障碍碰撞、自动网格
     link: /cloth/
   - icon: ⚡
-    title: 实测性能
-    details: 托管求解器 32×32（5826 约束）4.65 ms/步、64×64（23938 约束）20.2 ms/步，基准用例本身就是回归门槛
-    link: /cloth/
+    title: 实测性能（托管，无 Burst）
+    details: 软体 642 质点 2.745 ms/步、布料 32×32（5826 约束）3.299 ms/步、64×64（23938 约束）19.447 ms/步；基准用例本身就是回归门槛
+    link: /soft-body/
   - icon: 🪢
     title: 质点弹簧系统
     details: Particle / Spring / MassSpringSystem 三件套，胡克定律 + 轴向相对速度阻尼，力严格等大反向，内力不改总动量
@@ -39,19 +43,19 @@ features:
     link: /mass-spring/
   - icon: 🧪
     title: 确定性、可复现
-    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；66 个 EditMode 测试直接断言离散闭式解与逐位一致
+    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；97 个 EditMode 测试直接断言离散闭式解与逐位一致
     link: /reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmos 可视化
     details: 质点画线框球（固定点另一种颜色、半径按 log 质量），弹簧按应变着色：压缩偏蓝、拉伸偏红
     link: /tools/
   - icon: 🛠️
-    title: 编辑器工具三件套
-    details: Tools > Physics Simulation > Create Demo Scene / Build In Current Scene / Dump State，静默存盘不弹模态框
+    title: 编辑器工具三件套 × 三套
+    details: Tools > Physics Simulation >（质点弹簧 100~103）、Cloth（110~112）、Soft Body（120~122）各自的 Create Demo Scene / Build In Current Scene / Dump State，静默存盘不弹模态框
     link: /tools/
 
   - icon: 🗺️
     title: Roadmap
-    details: v1.1.0 布料（XPBD 距离约束）· v1.2.0 软体（四面体体积约束）· v1.3.0 Jobs + Burst 并行求解
+    details: v1.1.0 布料（XPBD 距离约束）已发布 · v1.2.0 软体（散度定理体积约束）已发布 · v1.3.0 Jobs + Burst 并行求解（可选程序集，托管实现留作回退）
     link: /guide/overview
 ---

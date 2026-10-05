@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Physics Simulation
-  text: Point-mass, spring & cloth physics for Unity
-  tagline: Deterministic solver · mass-spring chains and PBD cloth · substepping & dt clamping · a pure logic layer you can unit-test
+  text: Mass-spring, cloth and soft body physics for Unity
+  tagline: Deterministic solver · mass-spring chains, PBD cloth and volume-preserving soft bodies · substepping & dt clamping · a pure logic layer you can unit-test
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -17,14 +17,18 @@ hero:
       link: https://github.com/opoi375/com.opoi375.physics-simulation
 
 features:
+  - icon: 🫧
+    title: Soft body simulation (v1.2.0)
+    details: Any mesh grows its own topology — welded vertices become particles, triangle edges become structural springs, opposite vertices across shared edges become bend springs, plus a divergence-theorem volume constraint that pops back after being squashed. 642 particles at 2.745 ms/step
+    link: /en/soft-body/
   - icon: 🚩
     title: Cloth simulation (v1.1.0)
     details: Structural, shear and bend distance constraints solved with PBD projection — stiffness decoupled from step size and stable at stiffness = 1; wind, sphere obstacles, generated mesh
     link: /en/cloth/
   - icon: ⚡
-    title: Measured performance
-    details: Managed solver at 32×32 (5,826 constraints) 4.65 ms/step and 64×64 (23,938 constraints) 20.2 ms/step; the benchmarks are the regression gates
-    link: /en/cloth/
+    title: Measured performance (managed, no Burst)
+    details: Soft body 642 particles 2.745 ms/step, cloth 32×32 (5,826 constraints) 3.299 ms/step and 64×64 (23,938 constraints) 19.447 ms/step; the benchmarks are the regression gates
+    link: /en/soft-body/
   - icon: 🪢
     title: Mass-spring system
     details: Particle / Spring / MassSpringSystem — Hooke's law plus axial relative-velocity damping, forces applied strictly equal and opposite so internal forces never change total momentum
@@ -39,7 +43,7 @@ features:
     link: /en/mass-spring/
   - icon: 🧪
     title: Deterministic & reproducible
-    details: No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions
+    details: No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions — 97 EditMode tests
     link: /en/reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmo visualization
@@ -51,6 +55,6 @@ features:
     link: /en/tools/
   - icon: 🗺️
     title: Roadmap
-    details: "v1.2.0 soft bodies (arbitrary mesh → particles + constraints) · v1.3.0 Jobs + Burst parallel solver (target: 64x64 cloth inside one frame)"
+    details: "v1.1.0 cloth shipped · v1.2.0 soft bodies shipped (any mesh → welded particles, triangle-edge springs, divergence-theorem volume constraint) · v1.3.0 Jobs + Burst parallel solver as an optional assembly"
     link: /en/guide/overview
 ---

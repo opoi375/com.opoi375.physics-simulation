@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.2.0] - 2026-10-05
+
+### Added
+- **Soft body simulation**: `SoftBodyMeshData` / `SoftBodyParameters` / `SoftBodySimulation` / `SoftBodyEdge` — turn **any mesh** into a deforming, volume-preserving jelly without hand-wiring topology
+- **Topology grows out of the mesh**: spatial-hash welding of coincident vertices (cell size = `weldTolerance`, 27-cell neighbourhood, squared-distance test) → unique triangle edges become structural springs → opposite vertices across shared edges become bend springs → every edge used by exactly two triangles means `IsClosed`
+- **Volume constraint**: signed volume via the divergence theorem, `V = Σ (1/6)·x0·(x1×x2)`, driven by a gradient restoring force `F_i = -(k_v·(V-V₀) + c_v·dV/dt)·∇_iV`. It is a force, not a position projection, so it shares the explicit integrator and substepping; open meshes have no meaningful volume and are skipped automatically
+- **Reuses the v1.0.0 core**: no second solver — the soft body drives `MassSpringSystem.ApplyForces()` plus semi-implicit Euler and injects the volume force as an extra external force
+- **Stability safeguards**: 8 Gauss-Seidel projection passes once `maxStretchRatio` is exceeded, a `maxSpeed` cap (40 m/s by default — the last line of defence when stiff springs blow up), plus `maxDeltaTime` clamping and `substeps`
+- **Unity layer**: `SoftBodyBehaviour` (local-space simulation, instance mesh with verbatim topology, four `SoftBodyPinMode` options, serializable `initialVelocity`, `generateMesh` / `recalculateNormals` / `drawGizmoWireframe`, failures reported via `LastBuildError` instead of throwing)
+- **Editor tools**: `Tools > Physics Simulation > Soft Body > Create Soft Body Demo Scene / Build In Current Scene / Dump State` (priority 120-122, silent save). Dump State walks every soft body in the scene and prints `enabled` / `autoSimulate` / `IsBuilt` / volume retention / max stretch ratio / max speed
+- **Demo scene** `Assets/Scenes/SoftBodyDemo.unity`: a blue jelly pinned at the bottom given a shove, plus an orange bag pinned at the top swinging. Verified in Play mode: visible deformation (5.2% of pixels changing between frames), volume retention 0.998-1.000, no non-finite state
+- **Shared demo material helper** `DemoMaterialHelper`: fetches the active pipeline's `defaultMaterial` by reflection and clones it (one implementation for cloth and soft body, so the `HideFlags.DontSave` trap cannot be re-trod)
+- **31 soft body EditMode tests** (13 core solver + 11 Unity layer + 7 editor tools); the full suite is 97 tests
+- **Benchmarks**: 642 particles (1920 structural + 1920 bend springs, 1280 triangles, 4 substeps) best **2.745 ms/step**, mean 2.814 ms/step; cloth re-measured on the same machine - 32x32 best 3.299 ms/step, 64x64 best 19.447 ms/step
+- **Bilingual documentation**: `/soft-body/` module guide and `/reference/soft-body-parameters`
+
+### Fixed
+- Procedural box mesh had 4 faces wound outward and 2 inward ⇒ divergence-theorem volume came out at **1/3** of the analytic value (caught by the new `BuildBoxMesh_WithSingleSubdivision_IsAWatertightBox` test)
+- Reflecting the pipeline's `defaultMaterial` without `BindingFlags.Instance` ⇒ the template was never found and demo materials silently fell back to guessing shader names
+- Setting `triangles` before `vertices` on the instance mesh ⇒ Unity rejected the indices (`Failed setting triangles... VertexCount: 0`), leaving a faceless mesh with zero normals
+- Demo perturbations were written only to runtime particle positions ⇒ `Awake → Rebuild` in Play mode rebuilt from the source mesh and the perturbation vanished, freezing the frame. Perturbations are now a serialized `initialVelocity`
+- Compile-level issues such as calling `SoftBodySimulation.BendSpringCount` as a method (CS1955) and ambiguous `Object` under `using System;` (CS0104)
+
+### Notes
+- Dependencies are still only `com.unity.test-framework`; the core does not reference URP, Unity.Mathematics or Burst
+- Known limits: soft bodies do **not** interact with colliders (they pass straight through the ground, which is why the demo pins layers instead of dropping them); no self-collision; the volume constraint is a gradient force rather than a hard constraint (about 1% deviation under violent deformation); bend spring counts depend on the triangulation, so tests assert invariants rather than specific numbers
+- Planned: 1.3.0 Jobs + Burst parallel solver as an optional assembly, with the managed path kept as fallback and this benchmark as the baseline
+
 ## [1.1.0] - 2026-10-05
 
 ### Added

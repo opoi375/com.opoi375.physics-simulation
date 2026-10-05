@@ -52,8 +52,33 @@ Debug.Log($"摆锤位置 {system.Particles[bob].position}，最大速度 {system
 把可变帧间隔的 `deltaTime` 直接喂给物理，会得到"帧率越高摆得越快"的经典 bug。本包在 `Step()` 里还额外做了 `maxDeltaTime` 钳制（默认 1/15 秒），但**钳制是兜底，不是让你随便喂**：请始终在 `FixedUpdate` 里推进。
 :::
 
+## 另外两个模块：一行起步
+
+上面是质点弹簧。另外两个模块各自最短的可用路径：
+
+```csharp
+using PhysicsSimulation;
+using UnityEngine;
+
+// 布料：一面 20×14、顶边钉住、朝 +Z 吹风的旗
+var cloth = gameObject.AddComponent<ClothBehaviour>();
+cloth.parameters = new ClothParameters { columns = 20, rows = 14, spacing = 0.1f };
+cloth.pinEdges = ClothPinEdges.Top;     // 只钉顶边
+cloth.Rebuild();
+
+// 软体：把任意网格变成会瘪又会鼓回来的果冻
+var soft = gameObject.AddComponent<SoftBodyBehaviour>();
+soft.sourceMesh = someMesh;                       // 顶点会被焊接，三角形边自动成弹簧
+soft.pinMode = SoftBodyPinMode.BottomVertices;    // 钉住最低一层
+soft.initialVelocity = new Vector3(2.4f, 0f, 0f); // 推一把（必须走这个字段，见软体文档）
+soft.Rebuild();
+```
+
+两者都在 `FixedUpdate` 里自己推进（`autoSimulate` 为真时），也都能 `Step(dt)` 手动驱动。
+不想写代码就用菜单：**Tools → Physics Simulation → Cloth / Soft Body → Create … Demo Scene**。
+
 ## 下一步
 
-- 公式、参数含义、稳定性推导：[质点弹簧](/mass-spring/)
-- 字段速查：[参数参考](/reference/mass-spring-parameters)
+- 公式、参数含义、稳定性推导：[质点弹簧](/mass-spring/) · [布料](/cloth/) · [软体](/soft-body/)
+- 字段速查：[质点弹簧参数](/reference/mass-spring-parameters) · [布料参数](/reference/cloth-parameters) · [软体参数](/reference/soft-body-parameters)
 - 出问题时怎么查：[编辑器工具](/tools/)

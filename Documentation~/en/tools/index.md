@@ -75,6 +75,26 @@ Three deliberate choices in the demo scene:
 - **Wind blows purely towards `+Z`** (no `y` component) — an upward component lifts the whole flag above the ball and you lose the drape.
 - **The material is cloned from the active pipeline's `defaultMaterial`** (fetched by reflection, so the package still does not depend on URP/HDRP), and it must **not** be marked `HideFlags.DontSave` — that reference is lost after the scene reloads for Play mode and the whole sheet renders magenta.
 
+## Soft body tools (v1.2.0)
+
+Menus live under **Tools → Physics Simulation → Soft Body**, priority 120–122.
+
+| Menu | Priority | What it does | Writes to disk |
+| --- | --- | --- | --- |
+| Create Soft Body Demo Scene | 120 | New scene → blue jelly (bottom pinned, 2.4 m/s sideways kick) + orange bag (top pinned, 2.2 m/s swing) + ground, camera, light → saved as `Assets/Scenes/SoftBodyDemo.unity` | ✅ silently |
+| Build In Current Scene | 121 | Adds both soft bodies to the scene you already have open | ❌ marks dirty only |
+| Dump State | 122 | Logs, for **every** `SoftBodyBehaviour`: `enabled` / `autoSimulate` / `activeInHierarchy` / `IsBuilt`, particle and constraint counts, volume retention, max stretch ratio, max speed | ❌ |
+
+Deliberate choices, each one earned by a bug:
+
+- **Perturbations go through `initialVelocity`, not by pushing particles.** Shearing the top with
+  `SetPositions` in the editor looks right until you press Play — `Awake → Rebuild` reconstructs the
+  simulation from the source mesh and the perturbation vanishes, leaving a frozen frame. The kick has to be serialized.
+- **Stiffness is 130, not the 1200 default.** The default is genuinely stiff (0.8 kg sags 6 mm); a demo has to look soft.
+- The material uses the same pipeline `defaultMaterial` logic as the cloth demo (previous section), and likewise must **not** be marked `HideFlags.DontSave`.
+
+Dump State is the tool to reach for when "nothing is moving": it tells you whether the solver is running at all (is max speed zero?).
+
 ## Running the tests
 
 **Window → General → Test Runner → EditMode**. The package is embedded under `Packages/`, so its tests show up automatically — nothing needs to be added to `testables` in `Packages/manifest.json`.
@@ -86,3 +106,11 @@ Three deliberate choices in the demo scene:
 | `MassSpringSystemTests.cs` | 6 | pinned particles, determinism, argument validation, stiffness + sub-stepping, reset, dt clamping |
 | `MassSpringUnityLayerTests.cs` | 10 | configuration → system translation, `MassSpringBehaviour` rebuild and error reporting, `Capture Current As Rest` |
 | `MassSpringDemoToolsTests.cs` | 5 | demo chain structure, decreasing stiffness, auto rest lengths, sub-step safety margin, visual bindings |
+| `ClothSimulationTests.cs` | 16 | topology and indexing, three constraint families, stretch clamp, sphere obstacles never penetrated, wind and damping, determinism, validation |
+| `ClothUnityLayerTests.cs` | 14 | `ClothBehaviour` local-space contract, instance mesh write-back, edge pinning, failures that do not throw |
+| `ClothDemoToolsTests.cs` | 6 | demo cloth structure, obstacle world radius, long-run stability, material source, empty-scene dump |
+| `SoftBodySimulationTests.cs` | 13 | vertex welding, structural/bend topology, closedness and signed volume, volume retention, `SetVelocity`, validation and state immutability |
+| `SoftBodyUnityLayerTests.cs` | 11 | `SoftBodyBehaviour` local space, verbatim topology copy, four pin modes, `initialVelocity`, silent build failures |
+| `SoftBodyDemoToolsTests.cs` | 7 | demo jelly structure and kick, 180 steps without exploding, material source, procedural box winding and volume |
+
+97 EditMode tests in total.

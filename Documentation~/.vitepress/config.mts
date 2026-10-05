@@ -18,7 +18,8 @@ function sidebarZh() {
       text: '模拟模块',
       items: [
         { text: '质点弹簧（Mass-Spring）', link: '/mass-spring/' },
-        { text: '布料（Cloth）', link: '/cloth/' }
+        { text: '布料（Cloth）', link: '/cloth/' },
+        { text: '软体（Soft Body）', link: '/soft-body/' }
       ]
     },
     {
@@ -30,6 +31,7 @@ function sidebarZh() {
       items: [
         { text: '质点弹簧参数参考', link: '/reference/mass-spring-parameters' },
         { text: '布料参数参考', link: '/reference/cloth-parameters' },
+        { text: '软体参数参考', link: '/reference/soft-body-parameters' },
         { text: '更新日志', link: '/changelog' }
       ]
     }
@@ -50,7 +52,8 @@ function sidebarEn() {
       text: 'Simulation Modules',
       items: [
         { text: 'Mass-Spring System', link: '/en/mass-spring/' },
-        { text: 'Cloth Simulation', link: '/en/cloth/' }
+        { text: 'Cloth Simulation', link: '/en/cloth/' },
+        { text: 'Soft Body Simulation', link: '/en/soft-body/' }
       ]
     },
     {
@@ -62,6 +65,7 @@ function sidebarEn() {
       items: [
         { text: 'Mass-Spring Parameter Reference', link: '/en/reference/mass-spring-parameters' },
         { text: 'Cloth Parameter Reference', link: '/en/reference/cloth-parameters' },
+        { text: 'Soft Body Parameter Reference', link: '/en/reference/soft-body-parameters' },
         { text: 'Changelog', link: '/en/changelog' }
       ]
     }
@@ -87,7 +91,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/guide/overview' },
-          { text: '模拟模块', link: '/cloth/' },
+          { text: '模拟模块', link: '/soft-body/' },
           { text: '工具', link: '/tools/' },
           { text: '参考', link: '/reference/mass-spring-parameters' }
         ],
@@ -111,7 +115,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/en/guide/overview' },
-          { text: 'Modules', link: '/en/cloth/' },
+          { text: 'Modules', link: '/en/soft-body/' },
           { text: 'Tools', link: '/en/tools/' },
           { text: 'Reference', link: '/en/reference/mass-spring-parameters' }
         ],

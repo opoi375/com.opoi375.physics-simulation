@@ -1,5 +1,33 @@
 # 更新日志
 
+## [1.2.0] - 2026-10-05
+
+### Added
+- **软体模拟（Soft Body）**：`SoftBodyMeshData` / `SoftBodyParameters` / `SoftBodySimulation` / `SoftBodyEdge` —— 把**任意网格**变成会形变又保体积的果冻，不需要你手搭拓扑
+- **拓扑自己长出来**：空间哈希焊接重合顶点（格边长 = `weldTolerance`，27 格邻域 + 平方距离）→ 三角形边去重成结构弹簧 → 共边三角形的对顶点成弯曲弹簧 → 每条边恰好 2 个三角形即 `IsClosed`
+- **体积约束**：散度定理有向体积 `V = Σ (1/6)·x0·(x1×x2)`，配梯度恢复力 `F_i = -(k_v·(V-V₀) + c_v·dV/dt)·∇_iV`。它是力而不是位置投影，所以和弹簧共用同一套显式积分与子步；开放网格体积无意义 ⇒ 自动跳过
+- **复用 v1.0.0 内核**：软体不写第二套求解器，直接驱动 `MassSpringSystem.ApplyForces()` + 半隐式欧拉，体积力作为额外外力注入
+- **稳定性保险**：`maxStretchRatio` 超限后 8 趟 Gauss-Seidel 位置投影、`maxSpeed` 速度封顶（默认 40 m/s，硬弹簧炸穿时的最后一道防线）、`maxDeltaTime` 钳制 + `substeps`
+- **Unity 层**：`SoftBodyBehaviour`（局部空间模拟、实例网格拓扑照抄源网格、`SoftBodyPinMode` 四种钉法、可序列化的 `initialVelocity`、`generateMesh` / `recalculateNormals` / `drawGizmoWireframe`、失败写 `LastBuildError` 不抛异常）
+- **编辑器工具**：`Tools > Physics Simulation > Soft Body > Create Soft Body Demo Scene / Build In Current Scene / Dump State`（优先级 120~122，静默存盘）；`Dump State` 会遍历场景内每个软体并打印 `enabled` / `autoSimulate` / `IsBuilt` / 体积保持率 / 最大拉伸比 / 最大速度
+- **演示场景** `Assets/Scenes/SoftBodyDemo.unity`：底面钉住被推一把的蓝色果冻 + 顶面钉住荡摆的橙色袋子；Play 模式实测形变可见（帧间变化 5.2%）、体积保持率 0.998~1.000、无非有限值
+- **共享演示材质工具** `DemoMaterialHelper`：反射取当前管线 `defaultMaterial` 作模板（布料/软体共用一套逻辑，避免 `HideFlags.DontSave` 那个坑被重复踩）
+- **31 个软体 EditMode 测试**（13 核心求解器 + 11 Unity 层 + 7 编辑器工具），全量 97 个测试通过
+- **性能基准**：642 质点（1920 结构 + 1920 弯曲弹簧、1280 三角形、子步 4）最佳 **2.745 ms/步**、均值 2.814 ms/步；同机复测布料 32×32 最佳 3.299 ms/步、64×64 最佳 19.447 ms/步
+- **中英双语文档**：`/soft-body/` 模块指南与 `/reference/soft-body-parameters` 参数参考
+
+### Fixed
+- 程序化长方体网格的三角形绕序 4 面朝外、2 面朝内 ⇒ 散度定理体积只剩解析值的 **1/3**（新增的 `BuildBoxMesh_WithSingleSubdivision_IsAWatertightBox` 抓到）
+- 反射读管线 `defaultMaterial` 时漏传 `BindingFlags.Instance` ⇒ 永远取不到模板材质，演示材质悄悄退化成"猜着色器名字"
+- 实例网格先设 `triangles` 再设 `vertices` ⇒ Unity 直接拒绝这批索引（`Failed setting triangles... VertexCount: 0`），网格没有面、法线全零
+- 演示扰动只写在运行时质点位置上 ⇒ Play 时 `Awake → Rebuild` 用源网格重建模拟，扰动一瞬间丢光、画面静止 ⇒ 改为可序列化的 `initialVelocity`
+- `SoftBodySimulation.BendSpringCount` 被当方法调用（CS1955）、`Object` 在 `using System;` 下二义（CS0104）等编译期问题
+
+### Notes
+- 包依赖仍然只有 `com.unity.test-framework`，核心不依赖 URP / Unity.Mathematics / Burst
+- 已知限制：软体**不与场景求交**（没有碰撞体，会直接穿过地面，所以演示用"钉住"而不是"落地"）；无自碰撞；体积是梯度恢复力不是硬约束（剧烈形变下允许约 1% 偏差）；弯曲弹簧数量随三角化方式变化，因此只对它断言不变量而非具体数值
+- 计划：1.3.0 Jobs + Burst 并行求解（可选程序集，托管实现保留为回退，本版本基准即对照基线）
+
 ## [1.1.0] - 2026-10-05
 
 ### Added

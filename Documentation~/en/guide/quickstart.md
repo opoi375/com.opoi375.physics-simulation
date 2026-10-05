@@ -49,8 +49,33 @@ In `AddSpring`, `restLength <= 0` means "use the current distance between the tw
 Feeding a variable frame interval into the physics gives you the classic "it swings faster on a fast machine" bug. `Step()` also clamps dt (`maxDeltaTime`, default 1/15 s), but **the clamp is a safety net, not a licence**: always advance from `FixedUpdate`.
 :::
 
+## The other two modules, one line each
+
+Everything above is mass-spring. The shortest usable path for the other two:
+
+```csharp
+using PhysicsSimulation;
+using UnityEngine;
+
+// Cloth: a 20x14 sheet, top edge pinned, wind blowing towards +Z
+var cloth = gameObject.AddComponent<ClothBehaviour>();
+cloth.parameters = new ClothParameters { columns = 20, rows = 14, spacing = 0.1f };
+cloth.pinEdges = ClothPinEdges.Top;     // pin the top edge only
+cloth.Rebuild();
+
+// Soft body: turn any mesh into a jelly that squashes and pops back
+var soft = gameObject.AddComponent<SoftBodyBehaviour>();
+soft.sourceMesh = someMesh;                       // vertices get welded, triangle edges become springs
+soft.pinMode = SoftBodyPinMode.BottomVertices;    // pin the lowest layer
+soft.initialVelocity = new Vector3(2.4f, 0f, 0f); // shove it (must be this field - see the soft body guide)
+soft.Rebuild();
+```
+
+Both advance themselves in `FixedUpdate` (when `autoSimulate` is on) and both accept a manual `Step(dt)`.
+No code needed either: **Tools → Physics Simulation → Cloth / Soft Body → Create … Demo Scene**.
+
 ## Next
 
-- Formulas, parameters, stability: [Mass-Spring](/en/mass-spring/)
-- Field lookup: [Parameter reference](/en/reference/mass-spring-parameters)
+- Formulas, parameters, stability: [Mass-Spring](/en/mass-spring/) · [Cloth](/en/cloth/) · [Soft Body](/en/soft-body/)
+- Field lookup: [Mass-spring parameters](/en/reference/mass-spring-parameters) · [Cloth parameters](/en/reference/cloth-parameters) · [Soft body parameters](/en/reference/soft-body-parameters)
 - Diagnosing problems: [Editor tools](/en/tools/)

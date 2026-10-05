@@ -30,13 +30,13 @@ Assemblies: `PhysicsSimulation.Runtime` → `PhysicsSimulation.Editor` → `Phys
 | Version | Contents | Status |
 | --- | --- | --- |
 | 1.0.0 | Mass-spring: particles, springs, semi-implicit Euler, implicit damping, substepping, dt clamping, gizmos, editor tools, demo scene | ✅ |
-| **1.1.0** | Cloth: structural / shear / bend distance constraints solved with PBD projection, wind, sphere obstacles, `ClothBehaviour`, generated mesh, 66 tests | ✅ current |
-| 1.2.0 | Soft bodies: tetrahedral volume constraints + edge distance constraints | 🚧 planned |
+| 1.1.0 | Cloth: structural / shear / bend distance constraints solved with PBD projection, wind, sphere obstacles, `ClothBehaviour`, generated mesh, 36 tests | ✅ |
+| **1.2.0** | Soft bodies: any mesh → welded particles + triangle-edge structural springs + opposite-vertex bend springs + a **divergence-theorem volume constraint** (no tetrahedralisation needed), reusing the mass-spring core; `SoftBodyBehaviour` with four pin modes and a serializable perturbation, demo scene, 31 tests | ✅ current |
 | 1.3.0 | Performance: `Jobs + Burst` parallel solver as an **optional assembly** (fall back to the managed path without Burst; core package dependencies stay at zero) | 🚧 planned |
 
 ### Explicitly out of scope (for now)
 
-Cloth self-collision, triangle-level intersection tests, interop with Unity `Rigidbody` / `ConfigurableJoint`, networking and replays, adaptive timesteps. Collision today means particle-vs-sphere push-out only.
+Self-collision for cloth and soft bodies, triangle-level intersection tests, interop with Unity `Rigidbody` / `ConfigurableJoint`, networking and replays, adaptive timesteps. Collision today means the cloth path's particle-vs-sphere push-out only — **soft bodies do not collide at all**, they pass straight through the ground, which is why the soft body demo pins a layer and shoves it instead of dropping it. The volume constraint is a gradient restoring force rather than a hard constraint, so roughly 1% deviation is tolerated under violent deformation; bend spring counts depend on the triangulation, so tests assert invariants (disjoint from structural springs, no duplicates, non-zero on a closed mesh) rather than specific numbers.
 
 Extension points are marked as `TODO` comments at the top of `MassSpringSystem` (`IConstraint`, `IForceGenerator`, collision and sleeping). v1 deliberately does **not** declare empty interfaces — abstractions nobody implements are worse than none.
 
