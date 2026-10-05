@@ -84,6 +84,8 @@ Menus live under **Tools → Physics Simulation → Soft Body**, priority 120–
 | Create Soft Body Demo Scene | 120 | New scene → blue jelly (**zero pinned particles**, free-falls onto the floor) + orange bag (top pinned, 2.2 m/s swing) + **ground as a Cube with a BoxCollider** + camera and light → saved as `Assets/Scenes/SoftBodyDemo.unity` | ✅ silently |
 | Build In Current Scene | 121 | Adds both soft bodies to the scene you already have open | ❌ marks dirty only |
 | Dump State | 122 | Logs, for **every** `SoftBodyBehaviour`: `enabled` / `autoSimulate` / `activeInHierarchy` / `IsBuilt`, particle and constraint counts, volume retention, max stretch ratio, max speed, **collision proxy count**, **lowest/highest particle world y** and how far the lowest sits above the box ground surface | ❌ |
+| Audit Selected Meshes | 123 | audits the **selected** model/mesh assets with the real solver, 90 steps (ground = a world-space `PlaneCollisionProxy`), one row per mesh with weld ratio / closure / volume retention / ms per step / verdict | ❌ |
+| Audit Mesh Assets In Folder | 124 | scans a whole folder (default `Assets`) and writes **two tables** (default vs size-scaled parameters) plus an improvement/regression comparison to `Logs/SoftBodyMeshAudit.md` | ❌ |
 
 Deliberate choices, each one earned by a bug:
 
@@ -109,8 +111,11 @@ Dump State is the tool to reach for when "nothing is moving": it tells you wheth
 | `ClothSimulationTests.cs` | 16 | topology and indexing, three constraint families, stretch clamp, sphere obstacles never penetrated, wind and damping, determinism, validation |
 | `ClothUnityLayerTests.cs` | 14 | `ClothBehaviour` local-space contract, instance mesh write-back, edge pinning, failures that do not throw |
 | `ClothDemoToolsTests.cs` | 6 | demo cloth structure, obstacle world radius, long-run stability, material source, empty-scene dump |
-| `SoftBodySimulationTests.cs` | 13 | vertex welding, structural/bend topology, closedness and signed volume, volume retention, `SetVelocity`, validation and state immutability |
+| `SoftBodySimulationTests.cs` | 16 | vertex welding (plus three boundary cases on cell coordinates, tolerance and float precision), structural/bend topology, closedness and signed volume, volume retention, `SetVelocity`, validation and state immutability |
 | `SoftBodyUnityLayerTests.cs` | 11 | `SoftBodyBehaviour` local space, verbatim topology copy, four pin modes, `initialVelocity`, silent build failures |
 | `SoftBodyDemoToolsTests.cs` | 7 | demo jelly structure and kick, 180 steps without exploding, material source, procedural box winding and volume |
 
-130 EditMode tests in total (v1.3.0 added 33 collision tests: 21 geometry-contract + 12 integration across the three solvers and the Collider bridge).
+| `SoftBodyMeshAuditTests.cs` | 22 | audit contract: verdict tiering (including the `InvertedWinding` / `DegenerateVolume` mis-report regressions), the note column, table column count surviving arbitrary error text |
+| `SoftBodyModelAuditToolsTests.cs` | 15 | mesh extraction, budget filtering, Markdown report with per-bucket total reconciliation, recommended-parameter scaling, the two-run comparison |
+
+170 EditMode tests in total (v1.3.0 added 33 collision tests; v1.4.0 added 40: 22 audit + 15 scan tool + 3 welding boundary cases).

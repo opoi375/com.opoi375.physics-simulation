@@ -33,7 +33,8 @@ Assemblies: `PhysicsSimulation.Runtime` → `PhysicsSimulation.Editor` → `Phys
 | 1.1.0 | Cloth: structural / shear / bend distance constraints solved with PBD projection, wind, sphere obstacles, `ClothBehaviour`, generated mesh, 36 tests | ✅ |
 | 1.2.0 | Soft bodies: any mesh → welded particles + triangle-edge structural springs + opposite-vertex bend springs + a **divergence-theorem volume constraint** (no tetrahedralisation needed), reusing the mass-spring core; `SoftBodyBehaviour` with four pin modes and a serializable perturbation, demo scene, 31 tests | ✅ |
 | **1.3.0** | Collision proxies: four pure shapes (sphere / OBB box / capsule / half-space) behind one `ICollisionProxy` shared by all three solvers; `Simulation` vs `World` registration spaces; `ColliderProxies` samples the scene's Colliders; off by default and bit-identical to v1.2.0 when off; soft bodies finally land instead of falling through | ✅ current |
-| 1.4.0 | Performance: `Jobs + Burst` parallel solver as an **optional assembly** (fall back to the managed path without Burst; core package dependencies stay at zero) | 🚧 planned |
+| 1.4.0 | Model audit: `SoftBodyMeshAudit` per-mesh verdicts, the welding deep-dive, and a real-asset measurement table | ✅ shipped |
+| 1.5.0 | Performance: `Jobs + Burst` parallel solver as an **optional assembly** (fall back to the managed path without Burst; core package dependencies stay at zero) | 🚧 planned |
 
 ### Explicitly out of scope (for now)
 

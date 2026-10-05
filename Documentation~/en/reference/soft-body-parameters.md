@@ -30,7 +30,7 @@ values **throw immediately** rather than silently handing you a simulation that 
 | `substeps` | 4 | `>= 1` | Substeps inside one `Step(dt)`. **Cheaper and more stable than raising stiffness** |
 | `maxDeltaTime` | 1/15 | finite, `> 0` | Ceiling for `ClampDeltaTime(dt)` — one hitched frame can't explode the body |
 | `collisionThickness` | 0.01 | finite, `>= 0` | **(v1.3.0)** Particle skin. When a soft body lands, "how far the lowest particle sits above the ground" is exactly this number |
-| `weldTolerance` | 1e-4 | finite, `> 0` | Vertex weld tolerance in metres; coincident vertices closer than this become one particle |
+| `weldTolerance` | 1e-4 | finite, `> 0` | Vertex weld tolerance in metres — a **radius, not a diameter**: seam gaps within it merge, gaps beyond it split into two particle sets, the mesh stops being closed and the volume constraint is silently skipped. See [From Mesh to Particles](/en/soft-body/mesh-to-particles) |
 | `enableStretchLimit` | true | — | Whether to enforce the max stretch ratio |
 | `maxStretchRatio` | 2 | `> 1` | Longest a structural spring may get, enforced by 8 Gauss-Seidel projection passes |
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0] - 2026-10-05
+
+### Added
+- **Model audit** `Runtime/SoftBody/SoftBodyMeshAudit.cs`: `Audit(data, parameters, steps, addGround)` runs the **real** `SoftBodySimulation` at a fixed 1/60 s step onto a world-space `PlaneCollisionProxy` ground and returns a `SoftBodyAuditResult` (weld ratio, particle/spring/triangle counts, closure, signed rest volume, volume retention, max stretch, lowest particle world y, ms per step, verdict). It **never throws on dirty input** — build failures become `BuildFailed` with the reason kept in `BuildError`
+- **Seven verdicts** `SoftBodyAuditVerdict`: `Healthy` / `OpenMesh` / `InvertedWinding` / `DegenerateVolume` / `DegenerateWeld` / `Unstable` / `BuildFailed`. The middle two were added **after scanning real assets**: an inside-out mesh used to report `Healthy` (dividing two negative volumes yields a tidy retention of 1), and a zero-thickness shell was indistinguishable from a genuine collapse (both printed `0.000`)
+- **Editor scanning** `Audit Selected Meshes (123)` and `Audit Mesh Assets In Folder (124)`: one pass over the whole project, emitting a "default parameters" table plus a "size-scaled recommended parameters" table and an improvement/regression comparison into `Logs/SoftBodyMeshAudit.md`; budget guards (120 meshes, 4000 vertices) and `StringComparer.Ordinal` sorting keep two scans byte-identical
+- **`RecommendedParameters(diagonal)` / `Diagonal(data)` / `BuildComparison()`** turn "how should this class of model be tuned" into a runnable comparison instead of a doc hand-wave
+- **Two documentation pages**: *From Mesh to Particles* states plainly that welding is a **uniform spatial hash, not an octree** (cell size = tolerance, 27-cell probe, exact squared-distance verdict, why not an octree, tolerance-is-a-radius, build-time rejections); *Real-Model Audit* publishes the per-row results for **104 meshes** of this project
+- **40 new EditMode tests** (22 audit + 15 scan tool + 3 welding boundary cases), **170 passing**; whole project 578 total, 576 passed, 2 skipped
+
+### Fixed
+- **The report's summary folded new verdicts into `BuildFailed`**: the old `switch` ended in `default: failed++`, so 9 of 104 rows (`InvertedWinding` 4 + `DegenerateVolume` 3 + genuine `BuildFailed` 2) were reported as "9 build failures". All seven buckets now count separately and a reconciliation check asserts they sum to the total — a future enum member lands in "unknown" instead of corrupting a bucket
+- **The note column printed `(unnamed)` on every healthy row**: `Sanitize`'s empty-string fallback was meant for model names. Healthy rows now show an explicit `-`, and `Note()` returns an empty string when there is nothing to say
+- **`BuildFailed` rows carried no reason**: a report that is only a table must not say "failed" and nothing else. The note column now carries the reason verbatim, single-lined so newlines and pipes inside exception messages cannot tear the table
+
+### Notes
+- **No performance work in this release** (the parallel solver moved to v1.5.0). `ms/step` in the audit only answers "is this magnitude usable"
+- `RecommendedParameters` is **a diagnostic suggestion, not the new default**: it saved 6 meshes (trees, reeds, mushrooms, the single-cell box) and broke 1 (`Tunnel_Mesh` 1.323 → 0.208, squashed by over-stiffening). Defaults stay conservative
+- The audit runs 90 steps on one body against a world-space half-space. `Healthy` means numerically sound, not aesthetically good
+
 ## [1.3.0] - 2026-10-05
 
 ### Added

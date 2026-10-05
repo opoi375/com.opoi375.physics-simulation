@@ -1,4 +1,25 @@
 # Changelog
+
+## [1.4.0] - 2026-10-05
+
+### Added
+- **模型审计** `Runtime/SoftBody/SoftBodyMeshAudit.cs`：`SoftBodyMeshAudit.Audit(data, parameters, steps, addGround)` 用**真实** `SoftBodySimulation` 跑固定 1/60 步长、落地在世界空间 `PlaneCollisionProxy` 地面上，产出 `SoftBodyAuditResult`（焊接比、质点/弹簧/三角形数、闭合性、有向静止体积、体积保持率、最大拉伸、最低质点世界 y、每步耗时、判定）。**对脏输入永不抛异常** —— 构建失败记成 `BuildFailed` 并把原因留在 `BuildError`
+- **七档判定** `SoftBodyAuditVerdict`：`Healthy` / `OpenMesh` / `InvertedWinding` / `DegenerateVolume` / `DegenerateWeld` / `Unstable` / `BuildFailed`。后两档是**扫描真实资产后补的**：绕序整体朝内的网格旧分类报 `Healthy`（两个负体积一除保持率就是正的），零厚度壳与"真的塌成 0"都印成 `0.000` 分不开
+- **编辑器扫描工具** `Tools/Physics Simulation/Soft Body/Audit Selected Meshes (123)` 与 `Audit Mesh Assets In Folder (124)`：一次扫全项目，输出「默认参数」+「按包围盒对角线放大的推荐参数」两张 Markdown 表和一份好转/变差对照，落盘 `Logs/SoftBodyMeshAudit.md`；预算线（单次 120 个、顶点 4000）+ `StringComparer.Ordinal` 排序保证两次扫描逐字一致
+- **`RecommendedParameters(diagonal)` / `Diagonal(data)` / `BuildComparison()`**：把"这类模型该怎么调"变成可执行的对照，而不是文档里一句空话
+- **文档两页（中英）**：[从任意网格到质点](/soft-body/mesh-to-particles) 讲清焊接**真的是均匀空间哈希不是八叉树**（格边长 = 容差、27 邻居探查、精确平方距离裁决、为什么不用八叉树、容差是半径、构建拒绝清单）；[真实模型实测](/soft-body/model-audit) 给出本项目 **104 个网格**的逐行判定与成本
+- **40 个新 EditMode 测试**（22 审计 + 15 扫描工具 + 3 焊接边界），全量 **170 通过**；整个工程 578 项 576 通过 2 跳过
+
+### Fixed
+- **扫描报告的合计行把新判定塞进 `BuildFailed`**：旧 `switch` 用 `default: failed++` 兜底，导致 104 行报告里 9 行（`InvertedWinding` 4 + `DegenerateVolume` 3 + 真 `BuildFailed` 2）被一起报成"构建失败 9"。现在七档各自计数，并加了**各档之和必须等于总数**的对账异常 —— 以后再加枚举值会走 `default` 计入"未知判定"而不是污染某一档
+- **`note` 列对每个健康行都印 `(unnamed)`**：`Sanitize` 的空串兜底本来是给模型名字用的，串到了 note 上。现在健康行是明确的 `-`，`Note()` 无话可说时返回空串
+- **`BuildFailed` 行没有原因**：报告只有表格，而表格里不带 `BuildError` 就等于让读的人去猜。现在 note 列带上原因原文（并做单行化，异常消息里的换行与竖线不会撕坏表格）
+
+### Notes
+- **本版不做性能工作**（并行求解器改排 v1.5.0）。审计的 `ms/step` 只是"这个量级能不能用"的判据
+- `RecommendedParameters` 是**诊断建议，不是新默认值**：实测救回 6 个（树、草、蘑菇、单胞盒子），同时打坏 1 个（`Tunnel_Mesh` 1.323 → 0.208 被过冲压扁）。默认值保持保守
+- 审计只跑 90 步、只测单体、地面是世界空间半空间；`Healthy` 只代表数值健康，不代表观感好
+
 ## [1.3.0] - 2026-10-05
 
 ### Added

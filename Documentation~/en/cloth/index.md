@@ -116,7 +116,7 @@ Measured by the EditMode benchmark tests in the package: Unity Editor, Mono mana
 | 64 × 64 | 4,096 | 23,938 | **20.2 ms/step** | 20.5 ms/step | Stress tier, roughly two frames per step at 60 fps |
 
 The benchmarks double as regression gates: `Benchmark_32x32_ManagedSolverFitsInsideOneFrame` (< 8 ms) and
-`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames` (< 33 ms). The optional Jobs + Burst assembly planned for `v1.4.0`
+`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames` (< 33 ms). The optional Jobs + Burst assembly planned for `v1.5.0`
 exists to push 64 × 64 back under a single frame.
 
 ## 6. Editor tools

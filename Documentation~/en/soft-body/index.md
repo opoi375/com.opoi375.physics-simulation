@@ -190,7 +190,12 @@ When the picture won't move, Dump State is the tool that answers it: it prints `
 
 See the [Editor Tools overview](/en/tools/).
 
-## 8. What's next
+## 8. Deep dives
 
+- [From Mesh to Particles](/en/soft-body/mesh-to-particles): how welding **actually** works (a uniform spatial hash, not an octree), why the tolerance is a radius, the float precision wall, and the build-time rejection list.
+- [Real-Model Audit](/en/soft-body/model-audit): per-mesh verdicts for 104 meshes from this project, failure taxonomy, the retuning comparison and the cost distribution.
 - [Soft Body Parameter Reference](/en/reference/soft-body-parameters): defaults, semantics, out-of-range behaviour.
-- v1.4.0 moves the solver into Jobs + Burst (optional assembly); this benchmark is the baseline to beat. v1.3.0 added collision and did no performance work.
+
+## 9. What's next
+
+- v1.5.0 moves the solver into Jobs + Burst (optional assembly); this benchmark is the baseline to beat. v1.3.0 shipped collision and v1.4.0 the model audit; neither touched performance.

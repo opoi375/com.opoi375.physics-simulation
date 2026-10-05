@@ -490,6 +490,95 @@ namespace PhysicsSimulation.Editor.Tests
                 "越界下标必须先抛异常");
         }
 
+        // ==================================================================
+        // 焊接用的均匀空间哈希：格边长 = weldTolerance，格坐标 = 顶点坐标 / 容差
+        // 这组用例盯的是"格坐标要塞进 32 位整数"这个隐含前提
+        // ==================================================================
+
+        // Given: 边长 1 米的闭合立方体，焊接容差压到 1e-6（格边长 1 微米）
+        //  When: 构建
+        //  Then: 24 个网格顶点仍然恰好焊成 8 个质点
+        //        完全重合的顶点在任何正容差下都该合并 —— 这是美术网格接缝的常见形态
+        [Test]
+        public void Weld_CoincidentVerticesMergeEvenAtTinyTolerance()
+        {
+            var p = BadParameters(x => x.weldTolerance = 1e-6f);
+            var body = new SoftBodySimulation(p);
+            body.Build(MakeBox(1f, 1f, 1f));
+
+            Assert.That(body.ParticleCount, Is.EqualTo(8),
+                "容差再小也不该把重合顶点拆成 24 个质点，实际 " + body.ParticleCount);
+            Assert.That(body.IsClosed, Is.True, "焊接正常时这个立方体必须是闭合的（否则体积约束会被静默跳过）");
+        }
+
+        // Given: 同一个 1 米立方体，整体挪到离原点 5e7 米处（容差 0.5，格坐标 1e8 仍在 int 内）
+        //  When: 构建
+        //  Then: 构建必须**明确拒绝**，而不是悄悄算出错东西
+        //        真正拦腰截断的不是哈希的 int 格坐标，而是 float 分辨率：
+        //        量级 5e7 处一个 ulp ≈ 6 米，1 米长的棱根本表示不出来，
+        //        顶点会塌成同一点 ⇒ 面积为 0 ⇒ 体积梯度失效。
+        //        （这条用例原本是想证明"格坐标溢出 int 会静默焊错"，实测推翻了那个假设：
+        //          重合顶点溢出后仍落进同一个桶、照样能焊；而远原点的网格先被 float 干掉。
+        //          所以这里断言的是"拒绝得清楚"这个真实契约，不给哈希加投机护栏。）
+        [Test]
+        public void Weld_MeshFarFromOrigin_IsRejectedWithAClearGeometricError()
+        {
+            var mesh = Shift(MakeBox(1f, 1f, 1f), new Vector3(5e7f, 0f, 0f));
+            var p = BadParameters(x => x.weldTolerance = 0.5f);
+
+            var ex = Assert.Throws(typeof(ArgumentException), () =>
+            {
+                var body = new SoftBodySimulation(p);
+                body.Build(mesh);
+            }, "顶点精度不足以表达这个尺寸的网格，必须在构建阶段拒绝");
+
+            StringAssert.Contains("面积", ex.Message, "要指出是几何退化，实际：" + ex.Message);
+        }
+
+        // Given: 一个 1 米立方体，上半部分的 4 个角整体抬高了 0.01 米（接缝裂开 0.01）
+        //  When: 分别用容差 0.02（跨过裂缝）与 0.005（够不到裂缝）构建
+        //  Then: 容差是**半径**：够到裂缝就焊成 8 个质点且闭合；够不到就裂成 12 个质点、
+        //        拓扑不闭合、体积约束被静默跳过 —— 这就是美术接缝最容易踩的坑
+        [Test]
+        public void Weld_ToleranceIsARadius_SeamGapDecidesWhetherVolumeConstraintSurvives()
+        {
+            var cracked = SplitTopOfBox(0.01f);
+
+            var wide = new SoftBodySimulation(BadParameters(x => x.weldTolerance = 0.02f));
+            wide.Build(cracked);
+            Assert.That(wide.ParticleCount, Is.EqualTo(8), "容差 0.02 跨过 0.01 的裂缝，应焊成 8 个");
+            Assert.That(wide.IsClosed, Is.True, "焊上之后拓扑闭合，体积约束才会生效");
+            Assert.That(wide.RestVolume(), Is.GreaterThan(0.5f), "闭合后的静止体积应当接近 1 立方米");
+
+            var narrow = new SoftBodySimulation(BadParameters(x => x.weldTolerance = 0.005f));
+            narrow.Build(cracked);
+            Assert.That(narrow.ParticleCount, Is.EqualTo(12), "容差 0.005 够不到裂缝，上下两半各留 4+2 个");
+            Assert.That(narrow.IsClosed, Is.False, "裂缝让拓扑不闭合");
+            Assert.That(narrow.RestVolume(), Is.EqualTo(0f),
+                "不闭合时体积约束被静默跳过 —— 这块'果冻'其实没有体积回弹，扫描报告会报 OpenMesh");
+        }
+
+        /// <summary>
+        /// 只把**顶面那 4 个拆开的顶点**（MakeBox 里最后一个面组）沿 y 抬高 gap，
+        /// 制造一条真接缝：侧面顶棱留在 y=+0.5，顶盖跑到 y=+0.5+gap。
+        /// （上一版用 y>0 选点，把侧面顶棱一起抬走了，缝根本没裂开 —— 测出 8 个质点才发现。）
+        /// </summary>
+        static SoftBodyMeshData SplitTopOfBox(float gap)
+        {
+            var mesh = MakeBox(1f, 1f, 1f);
+            var v = (Vector3[])mesh.Vertices.Clone();
+            for (int i = v.Length - 4; i < v.Length; i++) v[i].y += gap;
+            return new SoftBodyMeshData(v, mesh.Triangles);
+        }
+
+        /// <summary>把整个网格平移（模拟"美术资产离原点很远"这种真实导入情形）。</summary>
+        static SoftBodyMeshData Shift(SoftBodyMeshData mesh, Vector3 offset)
+        {
+            var v = (Vector3[])mesh.Vertices.Clone();
+            for (int i = 0; i < v.Length; i++) v[i] += offset;
+            return new SoftBodyMeshData(v, mesh.Triangles);
+        }
+
         static SoftBodyParameters DefaultParameters()
         {
             return new SoftBodyParameters

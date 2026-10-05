@@ -110,7 +110,7 @@ public class Flag : MonoBehaviour
 
 基准用例本身就是回归门槛：`Benchmark_32x32_ManagedSolverFitsInsideOneFrame`（< 8 ms）与
 `Benchmark_64x64_ManagedSolverStaysWithinTwoFrames`（< 33 ms）。
-`v1.4.0` 的 Jobs + Burst 可选程序集就是冲着把 64×64 压进一帧去的（v1.3.0 先做了碰撞，本版没有动性能）。
+`v1.5.0` 的 Jobs + Burst 可选程序集就是冲着把 64×64 压进一帧去的（v1.3.0 先做了碰撞，本版没有动性能）。
 
 ## 6. 编辑器工具
 

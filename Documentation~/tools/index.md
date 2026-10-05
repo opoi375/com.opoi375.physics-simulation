@@ -85,6 +85,8 @@
 | Create Soft Body Demo Scene | 120 | 新建场景 → 蓝色果冻（**不钉任何质点**，自由落体砸地面）+ 橙色袋子（顶面钉住 + 纵向初速 2.2 m/s）+ **地面（Cube + BoxCollider）** + 相机灯光 → 存成 `Assets/Scenes/SoftBodyDemo.unity` | ✅ 会（静默存盘） |
 | Build In Current Scene | 121 | 只在当前场景加这两块软体 | ❌ 不写盘，只标脏 |
 | Dump State | 122 | 打印场景里**每一个** `SoftBodyBehaviour` 的 `enabled` / `autoSimulate` / `activeInHierarchy` / `IsBuilt`、质点与三类约束数量、体积保持率、最大拉伸比、最大速度、**碰撞代理个数**、**质点世界 y 最低/最高值**与"最低质点高出盒子上表面多少" | ❌ |
+| Audit Selected Meshes | 123 | 审计**选中**的模型/网格资源：用真实求解器跑 90 步（地面 = 世界空间 `PlaneCollisionProxy`），逐行给焊接比 / 闭合性 / 体积保持 / 每步耗时 / 判定 | ❌ |
+| Audit Mesh Assets In Folder | 124 | 扫整个目录（默认 `Assets`），输出「默认参数」+「按包围盒对角线放大的推荐参数」**两张表 + 好转/变差对照**到 `Logs/SoftBodyMeshAudit.md` | ❌ |
 
 演示里两个刻意的设计，都是踩出来的：
 
@@ -112,8 +114,11 @@
 | `ClothSimulationTests.cs` | 16 | 拓扑与索引、三类约束、拉伸限幅、球体障碍永不穿入、风与阻尼、确定性、参数校验 |
 | `ClothUnityLayerTests.cs` | 14 | `ClothBehaviour` 局部空间约定、实例网格写回、钉边、构建失败不抛异常 |
 | `ClothDemoToolsTests.cs` | 6 | 演示布料结构、障碍物世界半径、长时间步进不炸、材质来源、空场景 Dump |
-| `SoftBodySimulationTests.cs` | 13 | 顶点焊接、结构/弯曲弹簧拓扑、闭合判定与有向体积、体积保持、`SetVelocity`、参数校验与状态不变性 |
+| `SoftBodySimulationTests.cs` | 16 | 顶点焊接（含格坐标/容差/`float` 精度墙三条边界）、结构/弯曲弹簧拓扑、闭合判定与有向体积、体积保持、`SetVelocity`、参数校验与状态不变性 |
 | `SoftBodyUnityLayerTests.cs` | 11 | `SoftBodyBehaviour` 局部空间、实例网格拓扑照抄、四种钉法、`initialVelocity`、构建失败静默 |
 | `SoftBodyDemoToolsTests.cs` | 7 | 演示果冻结构与初速、180 步不炸且体积不塌、材质来源、程序化长方体绕序与体积 |
 
-合计 **130** 个 EditMode 测试（v1.3.0 新增 33 个碰撞测试：21 条几何契约 + 12 条三求解器与 Collider 桥接集成）。
+| `SoftBodyMeshAuditTests.cs` | 22 | 审计契约：判定分级（含 `InvertedWinding` / `DegenerateVolume` 两条漏报回归）、note 列、表格列数不被异常消息撕坏 |
+| `SoftBodyModelAuditToolsTests.cs` | 15 | 网格抽取、预算线筛选、Markdown 报告与分档合计对账、推荐参数缩放、两轮对照 |
+
+合计 **170** 个 EditMode 测试（v1.3.0 新增 33 个碰撞测试；v1.4.0 新增 40 个：22 审计 + 15 扫描工具 + 3 焊接边界）。

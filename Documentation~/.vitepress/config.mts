@@ -20,6 +20,8 @@ function sidebarZh() {
         { text: '质点弹簧（Mass-Spring）', link: '/mass-spring/' },
         { text: '布料（Cloth）', link: '/cloth/' },
         { text: '软体（Soft Body）', link: '/soft-body/' },
+        { text: '从网格到质点（焊接原理）', link: '/soft-body/mesh-to-particles' },
+        { text: '真实模型实测', link: '/soft-body/model-audit' },
         { text: '碰撞代理（Collision）', link: '/collision/' }
       ]
     },
@@ -55,6 +57,8 @@ function sidebarEn() {
         { text: 'Mass-Spring System', link: '/en/mass-spring/' },
         { text: 'Cloth Simulation', link: '/en/cloth/' },
         { text: 'Soft Body Simulation', link: '/en/soft-body/' },
+        { text: 'Mesh to Particles (welding)', link: '/en/soft-body/mesh-to-particles' },
+        { text: 'Real-Model Audit', link: '/en/soft-body/model-audit' },
         { text: 'Collision Proxies', link: '/en/collision/' }
       ]
     },

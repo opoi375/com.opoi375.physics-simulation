@@ -163,7 +163,7 @@ body free-falls, squashes 1.9% on impact and the volume constraint pops it back.
 | `updateCollidersEveryStep` | all three behaviours | `false` | turn on when colliders move or get enabled — rebuilds the proxy list each step (allocates) |
 
 Cost is `O(particles × proxies)` per substep, pure arithmetic, allocation-free while
-`updateCollidersEveryStep` stays off. v1.3.0 does **no** performance work: the parallel solver is still scheduled for v1.4.0.
+`updateCollidersEveryStep` stays off. v1.3.0 does **no** performance work (nor does v1.4.0, which shipped the model audit): the parallel solver is now scheduled for v1.5.0.
 
 ## Still not in this release
 

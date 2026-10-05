@@ -47,7 +47,7 @@ features:
     link: /en/mass-spring/
   - icon: 🧪
     title: Deterministic & reproducible
-    details: No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions — 130 EditMode tests
+    details: No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions — 170 EditMode tests
     link: /en/reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmo visualization
@@ -59,6 +59,6 @@ features:
     link: /en/tools/
   - icon: 🗺️
     title: Roadmap
-    details: "v1.1.0 cloth shipped · v1.2.0 soft bodies shipped · v1.3.0 collision proxies + Collider bridging shipped · v1.4.0 Jobs + Burst parallel solver as an optional assembly"
+    details: "v1.1.0 cloth · v1.2.0 soft bodies · v1.3.0 collision proxies + Collider bridging · v1.4.0 model audit with per-mesh verdicts, all shipped · v1.5.0 plans the Jobs + Burst parallel solver as an optional assembly"
     link: /en/guide/overview
 ---

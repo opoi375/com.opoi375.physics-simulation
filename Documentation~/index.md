@@ -47,7 +47,7 @@ features:
     link: /mass-spring/
   - icon: 🧪
     title: 确定性、可复现
-    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；130 个 EditMode 测试直接断言离散闭式解与逐位一致
+    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；170 个 EditMode 测试直接断言离散闭式解与逐位一致
     link: /reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmos 可视化
@@ -60,6 +60,6 @@ features:
 
   - icon: 🗺️
     title: Roadmap
-    details: v1.1.0 布料已发布 · v1.2.0 软体已发布 · v1.3.0 碰撞代理 + Collider 桥接已发布 · v1.4.0 Jobs + Burst 并行求解（可选程序集，托管实现留作回退）
+    details: v1.1.0 布料 · v1.2.0 软体 · v1.3.0 碰撞代理 + Collider 桥接 · v1.4.0 模型审计（真实网格逐网格判定）均已发布 · v1.5.0 计划 Jobs + Burst 并行求解（可选程序集，托管实现留作回退）
     link: /guide/overview
 ---

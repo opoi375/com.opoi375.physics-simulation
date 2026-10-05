@@ -25,7 +25,9 @@
 - **半空间语义** — 平面没有"体内多深"的概念：穿到地面以下 3 米也一律顶回面上 + `skin`，软体不会被子地面吞掉；`MeshCollider` / `Terrain` 明确不支持，也**不拿包围盒冒充**（`TryFrom` 返回 `null`）
 - **两种积分器要分开处理碰撞** — 布料是 PBD，位置被修正后速度自动跟着修正；质点弹簧与软体是半隐式欧拉，没有这种回算，所以只顶位置会让法向速度一路累积 ⇒ 同时削掉穿入方向的速度分量（切向保留，所以会沿斜面滑而不粘）
 - **默认关、关了逐位一致** — `collideWithSceneColliders` 默认 `false`：不注入变换矩阵、不生成代理，于是质点坐标压根不进 `Matrix4x4`；布料的球障碍算术另有逐位对照测试（把 v1.2.0 那段抄进测试，13 个样本比 `SingleToInt32Bits`）
-- **测试** — 130 个 EditMode 测试（30 质点弹簧 + 36 布料 + 31 软体 + 33 碰撞：21 几何契约 / 12 三求解器与 Collider 桥接）
+- **测试** — 170 个 EditMode 测试（30 质点弹簧 + 36 布料 + 34 软体 + 33 碰撞 + 22 模型审计 + 15 扫描工具）
+- **模型审计（v1.4.0）** — `SoftBodyMeshAudit` 用**真实求解器**跑 90 步、落地在世界空间地面上，给任意网格出判定：闭合 / 体积保持 / 翻面 / 零厚度壳 / 退化 / 构建失败，附焊接比与每步耗时；`永不抛异常`，脏输入也照样成行
+- **编辑器扫描** — `Tools/Physics Simulation/Soft Body/Audit Mesh Assets In Folder (124)` 一次扫全项目，输出"默认参数 + 按尺寸放大的推荐参数"两张 Markdown 表与好转/变差对照（预算线：单次 120 个、顶点 4000）
 
 ## 安装
 
@@ -59,7 +61,7 @@ https://github.com/opoi375/com.opoi375.physics-simulation.git
 | --- | --- |
 | `Runtime/MassSpring/` | 质点弹簧纯逻辑层 + `MassSpringBehaviour` / `MassSpringParticleLink` 驱动组件 |
 | `Runtime/Cloth/` | 布料求解器 `ClothSimulation` / `ClothParameters` + `ClothBehaviour` / `ClothMeshBuilder` |
-| `Runtime/SoftBody/` | 软体拓扑提取与求解 `SoftBodySimulation` / `SoftBodyMeshData` / `SoftBodyParameters` + `SoftBodyBehaviour` |
+| `Runtime/SoftBody/` | 软体拓扑提取与求解 `SoftBodySimulation` / `SoftBodyMeshData` / `SoftBodyParameters` + `SoftBodyBehaviour`；v1.4.0 起还有 `SoftBodyMeshAudit`（拿真实求解器给任意网格打判定） |
 | `Runtime/Collision/` | 碰撞代理 `ICollisionProxy` + 四种几何、`CollisionSet`（按插入顺序，顺序本身就是确定性契约）、`ColliderProxies`（从 `Collider` 采样） |
 | `Editor/MassSpring/`、`Editor/Cloth/`、`Editor/SoftBody/` | 编辑器工具（演示场景生成、当前场景重建、状态打印），`Editor/DemoMaterialHelper.cs` 是共用的管线默认材质工具 |
 | `Tests/Editor/` | EditMode 测试 |
@@ -73,8 +75,9 @@ https://github.com/opoi375/com.opoi375.physics-simulation.git
 | **1.0.0** | 质点弹簧：质点 / 弹簧 / 半隐式欧拉 / 隐式阻尼 / 子步 / dt 钳制 / Gizmos / 编辑器工具 / 文档站 |
 | **1.1.0** | **布料**：结构 / 剪切 / 弯曲三类邻居约束，PBD/XPBD 距离约束求解（硬度与步长解耦）、风、球体障碍碰撞、`ClothBehaviour` 组件、演示场景、36 个测试 |
 | 1.2.0 | **软体**：任意网格 → 焊接质点 + 三角形边结构弹簧 + 共边对顶点弯曲弹簧 + 散度定理体积约束，复用质点弹簧内核；`SoftBodyBehaviour` 四种钉法与可序列化扰动、演示场景、31 个测试 |
-| **1.3.0** | **碰撞（当前版本）**：`ICollisionProxy`（球 / OBB 盒 / 胶囊 / 半空间）三求解器共用、`Simulation` 与 `World` 两种登记空间、`ColliderProxies` 桥接场景 Collider、软体终于落地；默认关且关掉时与 v1.2.0 逐位一致；33 个新测试，全量 130 |
-| 1.4.0 | **性能**：`Jobs + Burst` 并行求解器，放在**可选程序集**里（不装 Burst 自动退回托管路径，包核心依赖保持为零）+ 基准数字 |
+| **1.3.0** | **碰撞**：`ICollisionProxy`（球 / OBB 盒 / 胶囊 / 半空间）三求解器共用、`Simulation` 与 `World` 两种登记空间、`ColliderProxies` 桥接场景 Collider、软体终于落地；默认关且关掉时与 v1.2.0 逐位一致；33 个新测试，全量 130 |
+| **1.4.0** | **模型审计（当前版本）**：`SoftBodyMeshAudit` 用真实求解器跑 90 步给每个网格出判定（Healthy / OpenMesh / InvertedWinding / DegenerateVolume / DegenerateWeld / Unstable / BuildFailed）、"焊接到底怎么做的"原理页、项目 104 个真实网格的实测表；+40 个测试，全量 170 |
+| 1.5.0 | **性能**：`Jobs + Burst` 并行求解器，放在**可选程序集**里（不装 Burst 自动退回托管路径，包核心依赖保持为零）+ 基准数字 |
 
 ### 明确不做（至少在本包的这几个版本里）
 
