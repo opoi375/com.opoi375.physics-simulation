@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Physics Simulation
-  text: Unity 质点弹簧物理模拟工具包
-  tagline: 确定性求解 · 半隐式欧拉 + 隐式阻尼 · 子步与 dt 钳制 · 纯逻辑层可单测 —— 从一根会摆的链子开始学物理模拟
+  text: Unity 质点弹簧与布料物理模拟工具包
+  tagline: 确定性求解 · 质点弹簧 + PBD 布料 · 半隐式欧拉与距离约束 · 纯逻辑层可单测 —— 从一根会摆的链子和一面会飘的旗开始学物理模拟
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -17,6 +17,14 @@ hero:
       link: https://github.com/opoi375/com.opoi375.physics-simulation
 
 features:
+  - icon: 🚩
+    title: 布料模拟（v1.1.0）
+    details: 结构 / 剪切 / 弯曲三类距离约束，PBD 投影求解，硬度与步长解耦，stiffness=1 也不炸；风、球体障碍碰撞、自动网格
+    link: /cloth/
+  - icon: ⚡
+    title: 实测性能
+    details: 托管求解器 32×32（5826 约束）4.65 ms/步、64×64（23938 约束）20.2 ms/步，基准用例本身就是回归门槛
+    link: /cloth/
   - icon: 🪢
     title: 质点弹簧系统
     details: Particle / Spring / MassSpringSystem 三件套，胡克定律 + 轴向相对速度阻尼，力严格等大反向，内力不改总动量
@@ -31,7 +39,7 @@ features:
     link: /mass-spring/
   - icon: 🧪
     title: 确定性、可复现
-    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；30 个 EditMode 测试直接断言离散闭式解
+    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；66 个 EditMode 测试直接断言离散闭式解与逐位一致
     link: /reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmos 可视化

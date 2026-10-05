@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Physics Simulation
-  text: Point-mass & spring physics for Unity
-  tagline: Deterministic solver · semi-implicit Euler with implicit damping · substepping & dt clamping · a pure logic layer you can unit-test
+  text: Point-mass, spring & cloth physics for Unity
+  tagline: Deterministic solver · mass-spring chains and PBD cloth · substepping & dt clamping · a pure logic layer you can unit-test
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -17,6 +17,14 @@ hero:
       link: https://github.com/opoi375/com.opoi375.physics-simulation
 
 features:
+  - icon: 🚩
+    title: Cloth simulation (v1.1.0)
+    details: Structural, shear and bend distance constraints solved with PBD projection — stiffness decoupled from step size and stable at stiffness = 1; wind, sphere obstacles, generated mesh
+    link: /en/cloth/
+  - icon: ⚡
+    title: Measured performance
+    details: Managed solver at 32×32 (5,826 constraints) 4.65 ms/step and 64×64 (23,938 constraints) 20.2 ms/step; the benchmarks are the regression gates
+    link: /en/cloth/
   - icon: 🪢
     title: Mass-spring system
     details: Particle / Spring / MassSpringSystem — Hooke's law plus axial relative-velocity damping, forces applied strictly equal and opposite so internal forces never change total momentum
@@ -43,6 +51,6 @@ features:
     link: /en/tools/
   - icon: 🗺️
     title: Roadmap
-    details: v1.1.0 cloth (XPBD distance constraints) · v1.2.0 soft bodies (tetrahedral volume constraints) · v1.3.0 Jobs + Burst parallel solver
+    details: "v1.2.0 soft bodies (arbitrary mesh → particles + constraints) · v1.3.0 Jobs + Burst parallel solver (target: 64x64 cloth inside one frame)"
     link: /en/guide/overview
 ---

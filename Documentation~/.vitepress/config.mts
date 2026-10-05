@@ -16,7 +16,10 @@ function sidebarZh() {
     },
     {
       text: '模拟模块',
-      items: [{ text: '质点弹簧（Mass-Spring）', link: '/mass-spring/' }]
+      items: [
+        { text: '质点弹簧（Mass-Spring）', link: '/mass-spring/' },
+        { text: '布料（Cloth）', link: '/cloth/' }
+      ]
     },
     {
       text: '工具',
@@ -26,6 +29,7 @@ function sidebarZh() {
       text: '参考',
       items: [
         { text: '质点弹簧参数参考', link: '/reference/mass-spring-parameters' },
+        { text: '布料参数参考', link: '/reference/cloth-parameters' },
         { text: '更新日志', link: '/changelog' }
       ]
     }
@@ -44,7 +48,10 @@ function sidebarEn() {
     },
     {
       text: 'Simulation Modules',
-      items: [{ text: 'Mass-Spring System', link: '/en/mass-spring/' }]
+      items: [
+        { text: 'Mass-Spring System', link: '/en/mass-spring/' },
+        { text: 'Cloth Simulation', link: '/en/cloth/' }
+      ]
     },
     {
       text: 'Tools',
@@ -54,6 +61,7 @@ function sidebarEn() {
       text: 'Reference',
       items: [
         { text: 'Mass-Spring Parameter Reference', link: '/en/reference/mass-spring-parameters' },
+        { text: 'Cloth Parameter Reference', link: '/en/reference/cloth-parameters' },
         { text: 'Changelog', link: '/en/changelog' }
       ]
     }
@@ -79,7 +87,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/guide/overview' },
-          { text: '模拟模块', link: '/mass-spring/' },
+          { text: '模拟模块', link: '/cloth/' },
           { text: '工具', link: '/tools/' },
           { text: '参考', link: '/reference/mass-spring-parameters' }
         ],
@@ -103,7 +111,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/en/guide/overview' },
-          { text: 'Modules', link: '/en/mass-spring/' },
+          { text: 'Modules', link: '/en/cloth/' },
           { text: 'Tools', link: '/en/tools/' },
           { text: 'Reference', link: '/en/reference/mass-spring-parameters' }
         ],

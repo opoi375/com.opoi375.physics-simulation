@@ -70,7 +70,7 @@ namespace PhysicsSimulation.EditorTools
         [MenuItem("Tools/Physics Simulation/Build In Current Scene", false, 101)]
         public static void BuildInCurrentScene()
         {
-            var existing = Object.FindFirstObjectByType<MassSpringBehaviour>();
+            var existing = Object.FindAnyObjectByType<MassSpringBehaviour>();
             if (existing != null)
             {
                 Undo.RecordObject(existing, "Rebuild Mass Spring Demo");
@@ -88,7 +88,7 @@ namespace PhysicsSimulation.EditorTools
         [MenuItem("Tools/Physics Simulation/Dump State", false, 102)]
         public static void DumpState()
         {
-            MassSpringBehaviour behaviour = Object.FindFirstObjectByType<MassSpringBehaviour>();
+            MassSpringBehaviour behaviour = Object.FindAnyObjectByType<MassSpringBehaviour>();
             if (behaviour == null)
             {
                 Debug.LogWarning("[PhysicsSimulation] 当前场景里没有 MassSpringBehaviour。" +
@@ -247,7 +247,7 @@ namespace PhysicsSimulation.EditorTools
             camera.nearClipPlane = 0.05f;
             camera.farClipPlane = 100f;
 
-            Light light = Object.FindFirstObjectByType<Light>();
+            Light light = Object.FindAnyObjectByType<Light>();
             if (light == null)
             {
                 var lightObject = new GameObject("Directional Light");

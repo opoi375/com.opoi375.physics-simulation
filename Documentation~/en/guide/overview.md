@@ -29,14 +29,14 @@ Assemblies: `PhysicsSimulation.Runtime` → `PhysicsSimulation.Editor` → `Phys
 
 | Version | Contents | Status |
 | --- | --- | --- |
-| **1.0.0** | Mass-spring: particles, springs, semi-implicit Euler, implicit damping, substepping, dt clamping, gizmos, editor tools, demo scene | ✅ current |
-| 1.1.0 | Cloth: structural / shear / bend neighbourhood constraints solved with XPBD distance constraints | 🚧 planned |
+| 1.0.0 | Mass-spring: particles, springs, semi-implicit Euler, implicit damping, substepping, dt clamping, gizmos, editor tools, demo scene | ✅ |
+| **1.1.0** | Cloth: structural / shear / bend distance constraints solved with PBD projection, wind, sphere obstacles, `ClothBehaviour`, generated mesh, 66 tests | ✅ current |
 | 1.2.0 | Soft bodies: tetrahedral volume constraints + edge distance constraints | 🚧 planned |
 | 1.3.0 | Performance: `Jobs + Burst` parallel solver as an **optional assembly** (fall back to the managed path without Burst; core package dependencies stay at zero) | 🚧 planned |
 
-### Explicitly out of scope for v1
+### Explicitly out of scope (for now)
 
-Rigid bodies · collision detection & response · rigid distance/angle constraints · cloth & self-collision · implicit or XPBD solvers · Jobs+Burst · adaptive timestep · soft-body volume constraints · `Rigidbody` / `ConfigurableJoint` interop · networking & replay.
+Cloth self-collision, triangle-level intersection tests, interop with Unity `Rigidbody` / `ConfigurableJoint`, networking and replays, adaptive timesteps. Collision today means particle-vs-sphere push-out only.
 
 Extension points are marked as `TODO` comments at the top of `MassSpringSystem` (`IConstraint`, `IForceGenerator`, collision and sleeping). v1 deliberately does **not** declare empty interfaces — abstractions nobody implements are worse than none.
 

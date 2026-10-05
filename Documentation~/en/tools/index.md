@@ -58,6 +58,23 @@ Click it a few times while playing and watch **max speed** and **strain** — fa
 | max speed grows monotonically | energy is being injected (wrong integration order / negative damping) | see [Mass-Spring §1](/en/mass-spring/) |
 | strain stays large and never settles | too soft, or `restLength` does not match the real initial distance | use `Capture Current As Rest`, or pass `restLength = 0` |
 
+
+## Cloth tools (v1.1.0)
+
+Menus live under **Tools → Physics Simulation → Cloth**, priority 110–112.
+
+| Menu | Priority | What it does | Writes to disk |
+| --- | --- | --- | --- |
+| Create Cloth Demo Scene | 110 | New scene → 20×14 cloth, pinned top edge, wind, obstacle ball, camera and light → saved as `Assets/Scenes/ClothDemo.unity` | ✅ silently |
+| Build In Current Scene | 111 | Adds one demo cloth to the scene you already have open | ❌ marks dirty only |
+| Dump State | 112 | Logs particle count, the three constraint family counts, pinned count, max stretch ratio and any non-finite state | ❌ |
+
+Three deliberate choices in the demo scene:
+
+- **The camera sits on the `+Z` side** — the grid lies in the local XY plane with its normal at `+Z`, so a `-Z` camera only sees an edge.
+- **Wind blows purely towards `+Z`** (no `y` component) — an upward component lifts the whole flag above the ball and you lose the drape.
+- **The material is cloned from the active pipeline's `defaultMaterial`** (fetched by reflection, so the package still does not depend on URP/HDRP), and it must **not** be marked `HideFlags.DontSave` — that reference is lost after the scene reloads for Play mode and the whole sheet renders magenta.
+
 ## Running the tests
 
 **Window → General → Test Runner → EditMode**. The package is embedded under `Packages/`, so its tests show up automatically — nothing needs to be added to `testables` in `Packages/manifest.json`.

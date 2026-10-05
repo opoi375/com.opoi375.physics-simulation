@@ -1,6 +1,6 @@
 {
   "name": "com.opoi375.physics-simulation",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Physics Simulation",
   "description": "A point-mass & spring physics simulation toolkit for Unity: mass-spring systems solved with semi-implicit Euler + linear damping, substepping for stability, gizmo visualization of particles and springs, and editor tools that build a demo scene in one click.",
   "unity": "6000.5",
