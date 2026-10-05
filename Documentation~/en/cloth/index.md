@@ -61,9 +61,14 @@ normal points to `+Z` — so put your camera on the `+Z` side or you will look a
 Methods: `Rebuild()`, `Step(dt)`, `ResetToInitialLayout()`, `CaptureCurrentAsInitial()`,
 `CollectStructuralEdges(...)`, plus `System` / `IsBuilt` / `LastBuildError` / `Mesh`.
 
-::: tip Obstacles come in world space, are solved in local space
-Every step `ClothBehaviour` converts each obstacle `Transform` into cloth-local coordinates before calling
-`ClothSimulation.AddSphereObstacle`, so moving, scaling or parenting the ball keeps the drape correct.
+::: tip Obstacles: the v1.1.0 sphere lives in local space, scene colliders in world space
+`ClothSimulation.AddSphereObstacle(center, radius)` now registers a **`Simulation`-space** `SphereCollisionProxy`:
+its coordinates are in cloth-local space, exactly like the particles, while `ObstacleCount` reports the **total proxy
+count** (bridged world colliders included). The other route is `collideWithSceneColliders` + `sceneColliders`, where
+`ClothBehaviour` samples the scene's `Collider`s into **`World`-space** proxies, each of which round-trips a particle
+through world space to push it out and back. That makes boxes and capsules exact (before v1.3.0 only spheres worked,
+and a non-uniformly scaled one was approximated with `lossyScale / √3`). Both routes coexist, `Step` walks
+`Collisions` in insertion order, and determinism is untouched.
 :::
 
 ## 3. Topology: three constraint families
@@ -111,7 +116,7 @@ Measured by the EditMode benchmark tests in the package: Unity Editor, Mono mana
 | 64 × 64 | 4,096 | 23,938 | **20.2 ms/step** | 20.5 ms/step | Stress tier, roughly two frames per step at 60 fps |
 
 The benchmarks double as regression gates: `Benchmark_32x32_ManagedSolverFitsInsideOneFrame` (< 8 ms) and
-`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames` (< 33 ms). The optional Jobs + Burst assembly planned for `v1.3.0`
+`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames` (< 33 ms). The optional Jobs + Burst assembly planned for `v1.4.0`
 exists to push 64 × 64 back under a single frame.
 
 ## 6. Editor tools

@@ -40,10 +40,11 @@ namespace PhysicsSimulation.EditorTools
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            var jelly = BuildSoftBody();
-            var bag = BuildHangingBag();
+            // 地面先建：软体要从 Rebuild 就拿到碰撞体，否则第一帧会穿过去
+            var groundCollider = SetupGround();
+            var jelly = BuildSoftBody(groundCollider);
+            var bag = BuildHangingBag(groundCollider);
 
-            SetupGround();
             SetupCameraAndLight(jelly.transform.position, bag.transform.position);
 
             AssetDatabase.Refresh();
@@ -55,15 +56,18 @@ namespace PhysicsSimulation.EditorTools
                 + "（材质来源 ⇒ " + LastMaterialPath + "；"
                 + "果冻 " + system.ParticleCount + " 质点 / " + system.StructuralSpringCount + " 结构弹簧 / "
                 + system.BendSpringCount + " 弯曲弹簧 / " + system.TriangleCount + " 三角形，"
-                + "静止体积 " + system.RestVolume().ToString("0.0000") + "，底面钉住 + 初速度 " + JellyKick + "；"
-                + "另一块顶面钉住、初速度 " + BagKick + "）。播放即可看到果冻回弹、袋子荡摆，选中物体可看弹簧 Gizmos。");
+                + "静止体积 " + system.RestVolume().ToString("0.0000") + "，"
+                + "不钉住 + 碰撞代理 " + system.Collisions.Count + " 个 + 初速度 " + JellyKick + "；"
+                + "另一块顶面钉住、初速度 " + BagKick + "）。播放就能看到果冻落在地面上搜扁再弹回来。"
+                + "静止时看不出形变是正常的——形变在播放后的前几秒，出问题时用 Dump State 看碰撞代理个数。");
         }
 
         [MenuItem("Tools/Physics Simulation/Soft Body/Build In Current Scene", false, 121)]
         public static void BuildSoftBodyInCurrentScene()
         {
-            BuildSoftBody();
-            BuildHangingBag();
+            var groundCollider = FindOrCreateGround();
+            BuildSoftBody(groundCollider);
+            BuildHangingBag(groundCollider);
             Debug.Log("[PhysicsSimulation] 已在当前场景生成两块软体（不写盘）。");
         }
 
@@ -107,6 +111,39 @@ namespace PhysicsSimulation.EditorTools
                       ? (system.Volume() / system.RestVolume()).ToString("0.000") : "n/a")).Append('\n');
                 sb.Append("  最大拉伸比 ").Append(system.MaxStretchRatio().ToString("0.0000"))
                   .Append(" | 最大速度 ").Append(system.System.MaxSpeed().ToString("0.0000")).Append('\n');
+                // 碰撞是 v1.3.0 的新开关，“为什么不落地”现在有了一个能直接看到的答案
+                sb.Append("  碰撞代理 ").Append(system.Collisions.Count)
+                  .Append(" 个（collideWithSceneColliders: ").Append(found.collideWithSceneColliders)
+                  .Append("，列表填了 ").Append(found.sceneColliders != null ? found.sceneColliders.Count : 0)
+                  .Append(" 个 Collider）").Append('\n');
+                // 最低/最高质点的**世界** y：软体到底落在哪里，靠这两个数就能定论，不需要靠看截图猜
+                float minY = float.MaxValue, maxY = float.MinValue;
+                for (int i = 0; i < system.ParticleCount; i++)
+                {
+                    float wy = found.transform.TransformPoint(system.GetPosition(i)).y;
+                    if (wy < minY) minY = wy;
+                    if (wy > maxY) maxY = wy;
+                }
+                sb.Append("  质点世界 y 最低 ").Append(minY.ToString("0.0000"))
+                  .Append(" | 最高 ").Append(maxY.ToString("0.0000"));
+                if (system.Collisions.Count > 0)
+                {
+                    // 把“应当停在哪个高度”直接迢回出来：只统计盒子里最上面的那个上表面
+                    float top = float.MinValue;
+                    for (int i = 0; i < system.Collisions.Count; i++)
+                    {
+                        var box = system.Collisions[i].Proxy as BoxCollisionProxy;
+                        if (box == null) continue;
+                        float surface = box.Center.y + box.HalfExtents.y;
+                        if (surface > top) top = surface;
+                    }
+                    if (top > float.MinValue)
+                    {
+                        sb.Append(" | 盒子地面上表面 ").Append(top.ToString("0.0000"))
+                          .Append(" ⇒ 最低质点高出 ").Append((minY - top).ToString("0.0000"));
+                    }
+                }
+                sb.Append('\n');
                 sb.Append("  非有限状态 ").Append(system.HasNonFiniteState())
                   .Append(" | 实例网格顶点 ").Append(found.Mesh == null ? 0 : found.Mesh.vertexCount)
                   .Append(" | 世界坐标 ").Append(found.transform.position.ToString("F3"));
@@ -117,19 +154,25 @@ namespace PhysicsSimulation.EditorTools
         /// <summary>
         /// 造一块"底面钉住 + 顶部横向推偏"的果冻。返回组件，调用方可以直接 Step。
         /// </summary>
-        public static SoftBodyBehaviour BuildSoftBody()
+        public static SoftBodyBehaviour BuildSoftBody(Collider groundCollider)
         {
             var root = new GameObject("SoftBodyJelly");
-            root.transform.position = new Vector3(-0.85f, 0.62f, 0f);
+            root.transform.position = new Vector3(-0.85f, 1.35f, 0f);
 
             var filter = root.AddComponent<MeshFilter>();
             var renderer = root.AddComponent<MeshRenderer>();
             var behaviour = root.AddComponent<SoftBodyBehaviour>();
 
             behaviour.sourceMesh = BuildBoxMesh(BoxSize, BoxSize, BoxSize, BoxSubdivisions);
-            behaviour.pinMode = SoftBodyPinMode.BottomVertices;
+            // v1.3.0：不再钉底面——整块自由落体，落到地面上搜扁再弹回来，这才能一眼看到“碰撞 + 体积保持”两件事
+            behaviour.pinMode = SoftBodyPinMode.None;
             behaviour.parameters = JellyParameters();
             behaviour.initialVelocity = JellyKick;
+            if (groundCollider != null)
+            {
+                behaviour.collideWithSceneColliders = true;
+                behaviour.sceneColliders = new List<Collider> { groundCollider };
+            }
             behaviour.Rebuild();
 
             string path;
@@ -139,7 +182,7 @@ namespace PhysicsSimulation.EditorTools
         }
 
         /// <summary>造一块"顶面钉住、被重力拽着下垂"的软体袋。</summary>
-        public static SoftBodyBehaviour BuildHangingBag()
+        public static SoftBodyBehaviour BuildHangingBag(Collider groundCollider)
         {
             var root = new GameObject("SoftBodyBag");
             root.transform.position = new Vector3(0.95f, 1.75f, 0f);
@@ -153,6 +196,11 @@ namespace PhysicsSimulation.EditorTools
             behaviour.parameters = JellyParameters();
             behaviour.parameters.damping = 1.2f;
             behaviour.initialVelocity = BagKick;
+            if (groundCollider != null)
+            {
+                behaviour.collideWithSceneColliders = true;
+                behaviour.sceneColliders = new List<Collider> { groundCollider };
+            }
             behaviour.Rebuild();
 
             string path;
@@ -238,12 +286,28 @@ namespace PhysicsSimulation.EditorTools
             }
         }
 
-        static void SetupGround()
+        /// <summary>
+        /// 地面用带 BoxCollider 的扁盒子，不用 Plane：本版的碰撞代理只解析球/盒/胶囊，
+        /// Plane 原语自带的是 MeshCollider，会直接被跳过——那样软体会“看起来有地面却依然穿地”，最难查。
+        /// </summary>
+        static Collider SetupGround()
         {
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
             ground.name = "Ground";
-            ground.transform.position = new Vector3(0f, -0.02f, 0f);
-            ground.transform.localScale = new Vector3(4f, 1f, 4f);
+            ground.transform.position = new Vector3(0f, -0.27f, 0f);
+            ground.transform.localScale = new Vector3(8f, 0.5f, 8f);        // 上表面 y = -0.02
+            return ground.GetComponent<Collider>();
+        }
+
+        /// <summary>往现有场景里塞软体时，先找现成的带碰撞体地面，没有就造一右。</summary>
+        static Collider FindOrCreateGround()
+        {
+            var existing = UnityEngine.Object.FindObjectOfType<BoxCollider>();
+            if (existing != null && existing.gameObject.name.IndexOf("ground", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return existing;
+            }
+            return SetupGround();
         }
 
         static void SetupCameraAndLight(Vector3 focusA, Vector3 focusB)

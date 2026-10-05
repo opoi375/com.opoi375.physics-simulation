@@ -145,6 +145,27 @@ The test `BuildChain_SubstepsKeepHardestLinkStable` recomputes that number and r
 
 It does not guarantee bit-identical results across platforms (`sin/cos/sqrt` differ between libm implementations), nor after you mutate particle state yourself outside `Step`. For cross-platform *visual* consistency, fix the dt sequence (fixed steps) rather than relying on frame rate.
 
+## 6.5 Interacting with scene colliders (v1.3.0)
+
+Mass-spring had no collision at all before this. `MassSpringSystem` now accepts injected proxies:
+
+```csharp
+system.Collisions.Add(new PlaneCollisionProxy(Vector3.zero, Vector3.up), CollisionProxySpace.World);
+system.Collisions.Add(new SphereCollisionProxy(new Vector3(0f, 1f, 0f), 0.5f), CollisionProxySpace.World);
+system.Step(Time.fixedDeltaTime);
+```
+
+Semi-implicit Euler and cloth's PBD must handle the push-out differently: cloth recomputes velocity as
+`v = (pos - prev) / h` at the end of each substep, so a positional fix corrects velocity for free. Mass-spring has
+no such recomputation — pushing particles out while leaving velocity alone lets the normal component grow by g every
+second, which ends in either a launch or NaN. So the particle-side pass also removes the velocity component still
+pointing into the shape and keeps the tangent (⇒ things slide down slopes instead of sticking; there is no friction
+knob).
+
+With a component it is `MassSpringBehaviour.collideWithSceneColliders` + `sceneColliders`, off by default — and when
+off not even the transform matrix is injected, so it stays bit-identical to v1.2.0. Full contract in
+[Collision proxies](/en/collision/).
+
 ## 7. Next
 
 - Put it in a scene: [Quick Start](/en/guide/quickstart)

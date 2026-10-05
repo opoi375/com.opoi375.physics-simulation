@@ -23,6 +23,12 @@ namespace PhysicsSimulation
         /// <summary>单步 dt 上限（秒），默认 1/15。超过它的 dt 会被钳制，避免掉帧/暂停后一次性灌进巨大时间步。</summary>
         public float maxDeltaTime = 1f / 15f;
 
+        /// <summary>
+        /// 碰撞皮肤厚度（米），默认 0.01。碰撞代理会把质点顶到几何体外至少这个距离，
+        /// 免得质点恰好卡在表面上因浮点误差反复“穿入/顶出”。只在 <see cref="MassSpringSystem.Collisions"/> 非空时参与计算。
+        /// </summary>
+        public float collisionThickness = 0.01f;
+
         /// <summary>实际生效的子步数（至少 1）。</summary>
         public int EffectiveSubsteps
         {

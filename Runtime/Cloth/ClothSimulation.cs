@@ -46,9 +46,11 @@ namespace PhysicsSimulation
         private int _shearEnd;
         private int _cursor;            // 约束写入游标（== 总约束数）
 
-        // 障碍物：质点位置投影完、钳拉伸前，先把穿进球体的质点顶回表面
-        private readonly List<Vector3> _obstacleCenters = new List<Vector3>();
-        private readonly List<float> _obstacleRadii = new List<float>();
+        // 碰撞代理（v1.3.0）：模拟空间的代理与旧的球障碍算术逐位一致；世界空间的代理经过变换矩阵生效。
+        private readonly CollisionSet _collisions = new CollisionSet();
+        private Matrix4x4 _localToWorld = Matrix4x4.identity;
+        private Matrix4x4 _worldToLocal = Matrix4x4.identity;
+        private bool _spaceIsIdentity = true;
 
         public ClothParameters Parameters { get; }
         public int ParticleCount { get { return _positions.Length; } }
@@ -163,8 +165,36 @@ namespace PhysicsSimulation
             }
         }
 
-        /// <summary>当前障碍物个数。</summary>
-        public int ObstacleCount { get { return _obstacleCenters.Count; } }
+        /// <summary>当前碰撞代理个数（含旧的球形障碍物）。</summary>
+        public int ObstacleCount { get { return _collisions.Count; } }
+
+        /// <summary>碰撞代理列表。往里 Add 就生效，不需要重建。</summary>
+        public CollisionSet Collisions { get { return _collisions; } }
+
+        /// <summary>有没有碰撞体（Dump State 用它说清状态）。</summary>
+        public bool HasColliders { get { return _collisions.Count > 0; } }
+
+        /// <summary>质点所在空间到世界空间的变换。不设置就是单位矩阵。</summary>
+        public Matrix4x4 SimulationToWorld { get { return _localToWorld; } }
+
+        /// <summary>
+        /// 告知求解器它的坐标相对世界怎么摆（组件传 <c>transform.localToWorldMatrix</c>）。
+        /// 只有登记成 <see cref="CollisionProxySpace.World"/> 的代理会用到它；
+        /// 传单位矩阵就完全退回 v1.2.0 的行为。逆矩阵这里一次算好，不每个质点算一遍。
+        /// </summary>
+        public void SetSimulationToWorld(Matrix4x4 localToWorld)
+        {
+            if (localToWorld == Matrix4x4.identity)
+            {
+                _localToWorld = Matrix4x4.identity;
+                _worldToLocal = Matrix4x4.identity;
+                _spaceIsIdentity = true;
+                return;
+            }
+            _localToWorld = localToWorld;
+            _worldToLocal = localToWorld.inverse;
+            _spaceIsIdentity = false;
+        }
 
         /// <summary>
         /// 加一个球形障碍物（坐标与质点同一空间）。半径必须是非负有限值，球心必须有限。
@@ -181,15 +211,14 @@ namespace PhysicsSimulation
             {
                 throw new ArgumentOutOfRangeException("center", "障碍物球心必须是有限值");
             }
-            _obstacleCenters.Add(center);
-            _obstacleRadii.Add(radius);
+            // 走统一的代理列表，空间标成 Simulation ⇒ 与 v1.1.0 那条算术逐位相同
+            _collisions.Add(new SphereCollisionProxy(center, radius), CollisionProxySpace.Simulation);
         }
 
-        /// <summary>清空所有障碍物。</summary>
+        /// <summary>清空所有碰撞代理（模拟空间与世界空间一起清）。</summary>
         public void ClearObstacles()
         {
-            _obstacleCenters.Clear();
-            _obstacleRadii.Clear();
+            _collisions.Clear();
         }
 
         /// <summary>推进一个时间步：钳制 dt → 分子步 → 每子步（预测 + 投影 + 碰撞 + 拉伸上限 + 回算速度）。</summary>
@@ -390,34 +419,9 @@ namespace PhysicsSimulation
         /// </summary>
         void ResolveCollisions()
         {
-            if (_obstacleCenters.Count == 0) return;
-
-            Vector3[] positions = _positions;
-            float thickness = Parameters.collisionThickness;
-
-            for (int o = 0; o < _obstacleCenters.Count; o++)
-            {
-                Vector3 center = _obstacleCenters[o];
-                float surface = _obstacleRadii[o] + thickness;
-                float surfaceSqr = surface * surface;
-
-                for (int i = 0; i < positions.Length; i++)
-                {
-                    Vector3 radial = positions[i] - center;
-                    float distanceSqr = radial.sqrMagnitude;
-                    if (distanceSqr >= surfaceSqr) continue;
-
-                    if (distanceSqr <= 1e-16f)
-                    {
-                        // 球心重合：方向未定义，给一个固定方向（+Y）顶出去，绝不产生 NaN
-                        positions[i] = center + new Vector3(0f, surface, 0f);
-                        continue;
-                    }
-
-                    float distance = (float)Math.Sqrt(distanceSqr);
-                    positions[i] = center + radial * (surface / distance);
-                }
-            }
+            if (_collisions.Count == 0) return;
+            CollisionPass.ResolvePositions(_collisions, _positions, Parameters.collisionThickness,
+                _localToWorld, _worldToLocal, _spaceIsIdentity);
         }
 
         void Commit(float invH)

@@ -31,13 +31,13 @@ namespace PhysicsSimulation.Editor.Tests
             return behaviour;
         }
 
-        // Given：菜单工具建出来的果冻（底面钉住 + 可序列化的横向初速度）
+        // Given：菜单工具建出来的果冻（v1.3.0 起整块自由悬浮 + 可序列化的横向初速度，groundCollider 传 null 表示不给地面）
         //  When：读它的模拟
-        //  Then：焊接出 26 个质点、底面被钉住、闭合网格且有正体积、自由质点带上了初速度
+        //  Then：焊接出 26 个质点、一个都不钉、闭合网格且有正体积、所有质点都带上初速度
         [Test]
-        public void BuildSoftBody_PinsBottomAndKicksFreeParticles()
+        public void BuildSoftBody_IsFreeFloatingAndKicked()
         {
-            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody());
+            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody(null));
 
             Assert.That(behaviour.IsBuilt, Is.True, "演示软体应构建成功，原因：" + behaviour.LastBuildError);
             var system = behaviour.Simulation;
@@ -52,22 +52,52 @@ namespace PhysicsSimulation.Editor.Tests
             Assert.That(system.Volume(), Is.EqualTo(system.RestVolume()).Within(1e-4f),
                 "刚建好时当前体积应等于静止体积");
 
-            Assert.That(behaviour.PinnedParticleCount, Is.GreaterThanOrEqualTo(4),
-                "底面钉住至少 4 个质点，实际 " + behaviour.PinnedParticleCount);
+            // v1.3.0：演示不再钉底面——整块自由落体才能同时把“碰撞”和“体积保持”两件事露出来
+            Assert.That(behaviour.pinMode, Is.EqualTo(SoftBodyPinMode.None),
+                "果冻应当不钉住，实际 " + behaviour.pinMode);
+            Assert.That(behaviour.PinnedParticleCount, Is.EqualTo(0),
+                "一个质点都不该被钉住，实际钉了 " + behaviour.PinnedParticleCount);
+            Assert.That(behaviour.collideWithSceneColliders, Is.False,
+                "传 null 地面时不该偷偷打开碰撞开关");
+            Assert.That(system.HasColliders, Is.False, "没地面就不应该有碰撞代理");
 
-            float maxPinnedY = float.MinValue, minFreeY = float.MaxValue;
+            // 扰动必须是"重建之后还在"的那种：所有质点都带上工具设定的初速度
+            for (int i = 0; i < system.ParticleCount; i++)
+                Assert.That(system.GetVelocity(i).x, Is.GreaterThan(0.5f),
+                    "质点 " + i + " 应带上横向初速度，实际 " + system.GetVelocity(i));
+        }
+
+        // Given：工具 + 一块带 BoxCollider 的地面（演示场景里真实的那条路）
+        //  When：自由落体跑 3 秒
+        //  Then：所有质点都停在地面上表面之上，体积没塔，状态有限——v1.2.0 “软体穿地”这个坑封掉了
+        [Test]
+        public void BuildSoftBody_WithGroundCollider_LandsInsteadOfSinking()
+        {
+            var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            ground.name = "TestGround";
+            ground.transform.position = new Vector3(0f, -0.27f, 0f);
+            ground.transform.localScale = new Vector3(8f, 0.5f, 8f);      // 上表面 y = -0.02
+            _spawned.Add(ground);
+
+            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody(ground.GetComponent<Collider>()));
+            var system = behaviour.Simulation;
+
+            Assert.That(behaviour.collideWithSceneColliders, Is.True, "递了地面就必须打开碰撞");
+            Assert.That(system.HasColliders, Is.True, "重建后模拟里必须真的收到碰撞代理");
+            Assert.That(system.Collisions.Count, Is.EqualTo(1), "应当正好收到 1 个盒子代理");
+            float rest = system.RestVolume();
+
+            for (int i = 0; i < 180; i++) behaviour.Step(1f / 60f);
+
             for (int i = 0; i < system.ParticleCount; i++)
             {
-                if (system.IsPinned(i)) maxPinnedY = Mathf.Max(maxPinnedY, system.GetPosition(i).y);
-                else minFreeY = Mathf.Min(minFreeY, system.GetPosition(i).y);
+                Vector3 world = behaviour.transform.TransformPoint(system.GetPosition(i));
+                Assert.That(world.y, Is.GreaterThanOrEqualTo(-0.02f - 1e-3f),
+                    "质点 " + i + " 穿进了演示地面，世界位置 " + world);
             }
-            Assert.That(minFreeY, Is.GreaterThan(maxPinnedY), "被钉住的必须严格是最低那一层");
-
-            // 扰动必须是"重建之后还在"的那种：自由质点带上了工具设定的初速度
-            for (int i = 0; i < system.ParticleCount; i++)
-                if (!system.IsPinned(i))
-                    Assert.That(system.GetVelocity(i).x, Is.GreaterThan(0.5f),
-                        "自由质点 " + i + " 应带上横向初速度，实际 " + system.GetVelocity(i));
+            Assert.That(system.HasNonFiniteState(), Is.False, "落地后不该出现 NaN");
+            Assert.That(system.Volume() / rest, Is.GreaterThan(0.5f),
+                "落地搜压后体积保持率不该塔掉，实际 " + (system.Volume() / rest));
         }
 
         // Given：工具建出来的软体
@@ -76,7 +106,7 @@ namespace PhysicsSimulation.Editor.Tests
         [Test]
         public void BuildSoftBody_AttachesInstancedMeshMatchingSource()
         {
-            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody());
+            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody(null));
 
             var filter = behaviour.gameObject.GetComponent<MeshFilter>();
             Assert.That(filter.sharedMesh, Is.Not.SameAs(behaviour.sourceMesh), "必须是自己那份实例网格");
@@ -93,7 +123,7 @@ namespace PhysicsSimulation.Editor.Tests
         [Test]
         public void BuildSoftBody_RunsManyStepsWithoutBlowingUp()
         {
-            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody());
+            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody(null));
             var system = behaviour.Simulation;
             float rest = system.RestVolume();
 
@@ -112,7 +142,7 @@ namespace PhysicsSimulation.Editor.Tests
         [Test]
         public void BuildSoftBody_MaterialComesFromTheActivePipeline()
         {
-            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody());
+            var behaviour = Hide(SoftBodyDemoTools.BuildSoftBody(null));
             var renderer = behaviour.gameObject.GetComponent<MeshRenderer>();
 
             Assert.That(renderer.sharedMaterial, Is.Not.Null, "演示软体应当有材质");
@@ -127,7 +157,7 @@ namespace PhysicsSimulation.Editor.Tests
         [Test]
         public void BuildHangingBag_PinsTopAndSagsUnderGravity()
         {
-            var behaviour = Hide(SoftBodyDemoTools.BuildHangingBag());
+            var behaviour = Hide(SoftBodyDemoTools.BuildHangingBag(null));
             var system = behaviour.Simulation;
 
             float rest = system.RestVolume();

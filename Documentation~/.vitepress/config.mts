@@ -19,7 +19,8 @@ function sidebarZh() {
       items: [
         { text: '质点弹簧（Mass-Spring）', link: '/mass-spring/' },
         { text: '布料（Cloth）', link: '/cloth/' },
-        { text: '软体（Soft Body）', link: '/soft-body/' }
+        { text: '软体（Soft Body）', link: '/soft-body/' },
+        { text: '碰撞代理（Collision）', link: '/collision/' }
       ]
     },
     {
@@ -53,7 +54,8 @@ function sidebarEn() {
       items: [
         { text: 'Mass-Spring System', link: '/en/mass-spring/' },
         { text: 'Cloth Simulation', link: '/en/cloth/' },
-        { text: 'Soft Body Simulation', link: '/en/soft-body/' }
+        { text: 'Soft Body Simulation', link: '/en/soft-body/' },
+        { text: 'Collision Proxies', link: '/en/collision/' }
       ]
     },
     {
@@ -91,7 +93,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '指南', link: '/guide/overview' },
-          { text: '模拟模块', link: '/soft-body/' },
+          { text: '模拟模块', link: '/collision/' },
           { text: '工具', link: '/tools/' },
           { text: '参考', link: '/reference/mass-spring-parameters' }
         ],
@@ -115,7 +117,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/en/guide/overview' },
-          { text: 'Modules', link: '/en/soft-body/' },
+          { text: 'Modules', link: '/en/collision/' },
           { text: 'Tools', link: '/en/tools/' },
           { text: 'Reference', link: '/en/reference/mass-spring-parameters' }
         ],

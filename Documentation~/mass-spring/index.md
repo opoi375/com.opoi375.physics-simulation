@@ -147,6 +147,24 @@ k * h² / m = 1600 * 4.34e-6 / 0.8 = 0.0087   ≪ 4   ✅
 
 不保证的：跨平台浮位级一致（`sin/cos/sqrt` 的实现差异）、以及你自己在 `Step` 外面改质点状态后的行为。要跨平台"看起来一致"，请固定 `dt` 序列（定长步）而不是依赖帧率。
 
+## 6.5 与场景碰撞体相互作用（v1.3.0）
+
+质点弹簧以前完全没有碰撞。现在 `MassSpringSystem` 也接受注入的碰撞代理：
+
+```csharp
+system.Collisions.Add(new PlaneCollisionProxy(Vector3.zero, Vector3.up), CollisionProxySpace.World);
+system.Collisions.Add(new SphereCollisionProxy(new Vector3(0f, 1f, 0f), 0.5f), CollisionProxySpace.World);
+system.Step(Time.fixedDeltaTime);
+```
+
+半隐式欧拉与布料的 PBD 在碰撞上有个必须分开处理的差别：布料每子步末尾用 `v = (pos - prev)/h` 回算速度，
+位置被修正 ⇒ 速度自动跟着修正；质点弹簧**没有**这种回算，只把质点顶到体外会让法向速度每秒加一个 g，
+跑久了不是飞走就是 NaN。所以质点版的碰撞同时削掉"还在往几何体里扎"的速度分量、保留切向
+（⇒ 物体会沿斜面滑，而不是粘住；没有摩擦系数可调）。
+
+挂组件的话就是 `MassSpringBehaviour.collideWithSceneColliders` + `sceneColliders`，默认关；
+关掉时连变换矩阵都不注入，与 v1.2.0 逐位一致。契约细节见 [碰撞代理](/collision/)。
+
 ## 7. 下一步
 
 - 挂到场景里：[快速上手](/guide/quickstart)

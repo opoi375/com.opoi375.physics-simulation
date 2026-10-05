@@ -41,7 +41,7 @@ so `stiffness = 1` means "project fully every pass" and `stiffness = 0` means "n
 | Field | Default | Constraint | Meaning |
 | --- | --- | --- | --- |
 | `maxStretchRatio` | 2 | finite, `>= 1` | Hard ceiling on `length / restLength` per constraint, enforced by up to 32 clamping sweeps each substep |
-| `collisionThickness` | 0.01 | finite, `>= 0` | Minimum particle-to-sphere distance — effectively the fabric's thickness |
+| `collisionThickness` | 0.01 | finite, `>= 0` | Minimum particle-to-proxy distance — effectively the fabric's thickness. Since v1.3.0 it also applies to bridged scene colliders |
 
 ::: warning Two honest caveats
 1. **Stretch clamping is approximate**: Gauss-Seidel style per-edge correction means fixing one edge can push another out of

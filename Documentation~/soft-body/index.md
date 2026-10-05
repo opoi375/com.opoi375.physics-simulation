@@ -47,7 +47,9 @@ go.AddComponent<MeshFilter>();
 go.AddComponent<MeshRenderer>();
 var soft = go.AddComponent<SoftBodyBehaviour>();
 soft.sourceMesh = MeshAsset;
-soft.pinMode = SoftBodyPinMode.BottomVertices;   // 底面钉在地上
+soft.pinMode = SoftBodyPinMode.None;             // 整块自由落体
+soft.collideWithSceneColliders = true;           // 落在场景碰撞体上（v1.3.0）
+soft.sceneColliders = new List<Collider> { ground };
 soft.initialVelocity = new Vector3(2.4f, 0f, 0f); // 推一把
 soft.Rebuild();
 ```
@@ -129,12 +131,41 @@ Unity 6000.5.6f1，托管单线程，EditMode 基准测试，5 批 × 60 步取�
 一个细分两级的二十面体球（642 质点）单帧 2.7 ms，够和 32×32 的布料同屏跑。基准测试本身是
 `Benchmark_IcoSphere642_ManagedSolverFitsInsideOneFrame`，门槛 8 ms，超了会红。
 
+## 6.5 落地：碰撞代理（v1.3.0）
+
+软体在 v1.2.0 是"钉住一层再推一把"，因为它**根本不参与碰撞**，会直接穿过地面。v1.3.0 补上了这块：
+
+```csharp
+var soft = go.AddComponent<SoftBodyBehaviour>();
+soft.pinMode = SoftBodyPinMode.None;             // 一个质点都不钉
+soft.collideWithSceneColliders = true;
+soft.sceneColliders = new List<Collider> { groundCollider };
+soft.Rebuild();
+```
+
+- 求解器只认注入的 `ICollisionProxy`（球 / OBB 盒 / 胶囊 / 半空间），**不查 `PhysicsScene`**，所以确定性与逐位复现不受影响；
+- 模拟在局部空间，所以桥接进来的世界 Collider 会让每个质点"变到世界 → 推出 → 变回局部"，盒与胶囊是精确的；
+- 软体是半隐式欧拉，没有 PBD 那种 `v = (pos - prev)/h` 回算 —— 只顶位置会让法向速度无限累积，
+  所以碰撞同时**削掉穿入方向的速度分量**、保留切向（会沿斜面滑，不粘）；
+- `MeshCollider` / `Terrain` 明确不支持，也**不拿包围盒冒充** ⇒ 地面得用 Cube + `BoxCollider`；
+- 开关默认 `false`，关掉时与 v1.2.0 **逐位一致**（不注入矩阵、不生成代理）。
+
+实测（Play 中 Dump State）：
+
+```
+SoftBodyJelly：钉住 0 | 碰撞代理 1 个
+质点世界 y 最低 -0.0100 | 盒子地面上表面 -0.0200 ⇒ 最低质点高出 0.0100
+体积保持率 0.981 | 最大拉伸比 1.0893 | 非有限状态 False
+```
+
+最低质点高出地面正好等于 `collisionThickness`。完整契约、四种几何的脱出方向与开销见 [碰撞代理](/collision/)。
+
 ## 7. 编辑器工具
 
 `Tools ▸ Physics Simulation ▸ Soft Body`：
 
 - **Create Soft Body Demo Scene**（120）：生成 `Assets/Scenes/SoftBodyDemo.unity`，
-  一块底面钉住被推了一把的蓝色果冻 + 一块顶面钉住荡摆的橙色袋子。
+  一块**不钉任何质点**、自由落体砸在地面（Cube + `BoxCollider`）上的蓝色果冻 + 一块顶面钉住荡摆的橙色袋子。
 - **Build In Current Scene**（121）：只在当前场景里加这两块，不写盘。
 - **Dump State**（122）：把场景里**每一个** `SoftBodyBehaviour` 的质点/弹簧/三角形数量、闭合性、
   体积保持率、最大拉伸比、最大速度、`IsBuilt` 与失败原因打到 Console。
@@ -147,4 +178,4 @@ Unity 6000.5.6f1，托管单线程，EditMode 基准测试，5 批 × 60 步取�
 ## 8. 下一步
 
 - [软体参数参考](/reference/soft-body-parameters)：每个字段的默认值、语义、越界行为。
-- v1.3.0 会把求解器搬进 Jobs + Burst（可选程序集），这份基准就是对照基线。
+- v1.4.0 会把求解器搬进 Jobs + Burst（可选程序集），这份基准就是对照基线；v1.3.0 做的是碰撞，没有动性能。

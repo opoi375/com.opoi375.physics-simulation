@@ -14,6 +14,7 @@ The driver component (`Add Component → Physics Simulation / Mass Spring Behavi
 | `globalDamping` | float | `0.5` | 1/s | global linear damping, applied as the divisor `(1 + c·dt)`, can never flip the sign |
 | `substeps` | int | `8` | count | how many sub-steps one `FixedUpdate` is split into; the main stability knob, cost is linear |
 | `maxDeltaTime` | float | `1/15` | s | dt clamp |
+| `collisionThickness` | float | `0.01` | m | **(v1.3.0)** skin between a particle and a collision proxy; scaled for world-space proxies. See [Collision proxies](/en/collision/) |
 
 ### `particles` list
 

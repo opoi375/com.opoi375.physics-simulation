@@ -72,6 +72,12 @@ namespace PhysicsSimulation
         /// <summary>结构弹簧最大 长度/静止长度。必须 >= 1。</summary>
         public float maxStretchRatio = 2f;
 
+        /// <summary>
+        /// 碰撞皮肤厚度（米），默认 0.01。只有 <see cref="SoftBodySimulation.Collisions"/> 里有代理时才会用到。
+        /// 0 合法（质点贴表面），但容易因浮点误差在地面上反复“穿入/顶出”，所以默认留一层薄皮肤。
+        /// </summary>
+        public float collisionThickness = 0.01f;
+
         /// <summary>把外部 dt 钳到 [0, maxDeltaTime]。</summary>
         public float ClampDeltaTime(float dt)
         {
@@ -118,6 +124,8 @@ namespace PhysicsSimulation
                 throw new ArgumentException("weldTolerance 必须是有限正数，当前 " + weldTolerance, "weldTolerance");
             if (!(maxStretchRatio >= 1f) || float.IsInfinity(maxStretchRatio))
                 throw new ArgumentException("maxStretchRatio 必须是不小于 1 的有限数，当前 " + maxStretchRatio, "maxStretchRatio");
+            if (!(collisionThickness >= 0f) || float.IsInfinity(collisionThickness))
+                throw new ArgumentException("collisionThickness 必须是非负有限数（米），当前 " + collisionThickness, "collisionThickness");
         }
 
         static bool IsFinite(Vector3 v)

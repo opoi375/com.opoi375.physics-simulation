@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Physics Simulation
   text: Mass-spring, cloth and soft body physics for Unity
-  tagline: Deterministic solver · mass-spring chains, PBD cloth and volume-preserving soft bodies · substepping & dt clamping · a pure logic layer you can unit-test
+  tagline: Deterministic solver · mass-spring chains, PBD cloth, volume-preserving soft bodies and scene collision · substepping & dt clamping · a pure logic layer you can unit-test
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -17,6 +17,10 @@ hero:
       link: https://github.com/opoi375/com.opoi375.physics-simulation
 
 features:
+  - icon: 🧱
+    title: Scene collision (v1.3.0)
+    details: The solvers only know injected collision proxies (sphere / oriented box / capsule / half-space); the Unity layer samples Colliders for them — the logic layer never queries the scene, so closed-form assertions and bit-identical replay survive intact
+    link: /en/collision/
   - icon: 🫧
     title: Soft body simulation (v1.2.0)
     details: Any mesh grows its own topology — welded vertices become particles, triangle edges become structural springs, opposite vertices across shared edges become bend springs, plus a divergence-theorem volume constraint that pops back after being squashed. 642 particles at 2.745 ms/step
@@ -43,7 +47,7 @@ features:
     link: /en/mass-spring/
   - icon: 🧪
     title: Deterministic & reproducible
-    details: No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions — 97 EditMode tests
+    details: No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions — 130 EditMode tests
     link: /en/reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmo visualization
@@ -55,6 +59,6 @@ features:
     link: /en/tools/
   - icon: 🗺️
     title: Roadmap
-    details: "v1.1.0 cloth shipped · v1.2.0 soft bodies shipped (any mesh → welded particles, triangle-edge springs, divergence-theorem volume constraint) · v1.3.0 Jobs + Burst parallel solver as an optional assembly"
+    details: "v1.1.0 cloth shipped · v1.2.0 soft bodies shipped · v1.3.0 collision proxies + Collider bridging shipped · v1.4.0 Jobs + Burst parallel solver as an optional assembly"
     link: /en/guide/overview
 ---

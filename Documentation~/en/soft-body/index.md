@@ -50,8 +50,10 @@ go.AddComponent<MeshFilter>();
 go.AddComponent<MeshRenderer>();
 var soft = go.AddComponent<SoftBodyBehaviour>();
 soft.sourceMesh = MeshAsset;
-soft.pinMode = SoftBodyPinMode.BottomVertices;     // glued to the table
-soft.initialVelocity = new Vector3(2.4f, 0f, 0f);  // give it a shove
+soft.pinMode = SoftBodyPinMode.None;               // the whole body free-falls
+soft.collideWithSceneColliders = true;             // land on scene colliders (v1.3.0)
+soft.sceneColliders = new List<Collider> { ground };
+soft.initialVelocity = new Vector3(2.4f, 0f, 0f);  // or give it a shove
 soft.Rebuild();
 ```
 
@@ -138,12 +140,47 @@ A two-level subdivided icosphere (642 particles) costs 2.7 ms per step — enoug
 32×32 cloth. The benchmark is itself a test,
 `Benchmark_IcoSphere642_ManagedSolverFitsInsideOneFrame`, gated at 8 ms so a regression goes red.
 
+## 6.5 Landing on something: collision (v1.3.0)
+
+In v1.2.0 the demo pinned a layer and shoved it, because soft bodies **did not collide at all** — they fell straight
+through the floor. That is fixed:
+
+```csharp
+soft.pinMode = SoftBodyPinMode.None;             // pin nothing
+soft.collideWithSceneColliders = true;
+soft.sceneColliders = new List<Collider> { groundCollider };
+soft.Rebuild();
+```
+
+- the solver only knows injected `ICollisionProxy` shapes (sphere / oriented box / capsule / half-space) and never
+  queries a `PhysicsScene`, so determinism and bit-identical replay are untouched;
+- simulation runs in local space, so a bridged world collider round-trips every particle through world space —
+  boxes and capsules stay exact;
+- soft bodies use semi-implicit Euler, which has no `v = (pos - prev)/h` recomputation, so pushing positions alone would
+  let normal velocity accumulate without bound: the inward velocity component is removed and the tangent kept (it
+  slides rather than sticks);
+- `MeshCollider` and `Terrain` are unsupported and **not** faked with a bounding box — so make the ground a Cube with a
+  `BoxCollider`;
+- the switch defaults to `false`, and off is bit-identical to v1.2.0.
+
+Measured (`Dump State`, during Play):
+
+```
+SoftBodyJelly: pinned 0 | collision proxies 1
+particle world y lowest -0.0100 | box ground top surface -0.0200 ⇒ lowest particle sits 0.0100 above
+volume retention 0.981 | max stretch ratio 1.0893 | non-finite False
+```
+
+The lowest particle rests exactly `collisionThickness` above the floor. Full contract, exit directions and cost are in
+[Collision proxies](/en/collision/).
+
 ## 7. Editor tools
 
 `Tools ▸ Physics Simulation ▸ Soft Body`:
 
-- **Create Soft Body Demo Scene** (120): writes `Assets/Scenes/SoftBodyDemo.unity` — a blue jelly pinned at
-  the bottom that just got shoved, plus an orange bag pinned at the top swinging like a pendulum.
+- **Create Soft Body Demo Scene** (120): writes `Assets/Scenes/SoftBodyDemo.unity` — a blue jelly with **zero pinned
+  particles** that free-falls onto the ground (a Cube with a `BoxCollider`) and squashes, plus an orange bag pinned at
+  the top swinging like a pendulum.
 - **Build In Current Scene** (121): adds both bodies to the open scene, no file written.
 - **Dump State** (122): logs, for **every** `SoftBodyBehaviour` in the scene, particle/spring/triangle
   counts, closedness, volume retention, max stretch ratio, max speed, `IsBuilt` and the failure reason.
@@ -156,4 +193,4 @@ See the [Editor Tools overview](/en/tools/).
 ## 8. What's next
 
 - [Soft Body Parameter Reference](/en/reference/soft-body-parameters): defaults, semantics, out-of-range behaviour.
-- v1.3.0 moves the solver into Jobs + Burst (optional assembly); this benchmark is the baseline to beat.
+- v1.4.0 moves the solver into Jobs + Burst (optional assembly); this benchmark is the baseline to beat. v1.3.0 added collision and did no performance work.

@@ -408,6 +408,39 @@ namespace PhysicsSimulation
         // 积分
         // ==================================================================
 
+        // ==================================================================
+        // 碰撞代理（v1.3.0）：软体不再只能穿地
+        // ==================================================================
+
+        private readonly CollisionSet _collisions = new CollisionSet();
+        private Matrix4x4 _localToWorld = Matrix4x4.identity;
+        private Matrix4x4 _worldToLocal = Matrix4x4.identity;
+        private bool _spaceIsIdentity = true;
+
+        /// <summary>碰撞代理列表。空列表时逐位等价于 v1.2.0，这一条有回归测试锁住。</summary>
+        public CollisionSet Collisions { get { return _collisions; } }
+
+        /// <summary>有没有碰撞体（Dump State 靠它把“为什么不落地”说清）。</summary>
+        public bool HasColliders { get { return _collisions.Count > 0; } }
+
+        /// <summary>模拟空间（通常是组件局部空间）到世界的变换。</summary>
+        public Matrix4x4 SimulationToWorld { get { return _localToWorld; } }
+
+        /// <summary>告知求解器相对世界怎么摆；只有世界空间的代理会用到，传单位矩阵就退回 v1.2.0 行为。</summary>
+        public void SetSimulationToWorld(Matrix4x4 localToWorld)
+        {
+            if (localToWorld == Matrix4x4.identity)
+            {
+                _localToWorld = Matrix4x4.identity;
+                _worldToLocal = Matrix4x4.identity;
+                _spaceIsIdentity = true;
+                return;
+            }
+            _localToWorld = localToWorld;
+            _worldToLocal = localToWorld.inverse;
+            _spaceIsIdentity = false;
+        }
+
         /// <summary>推进一个时间步：dt 先钳到 maxDeltaTime，再均分成 substeps 个子步逐步积分。</summary>
         public void Step(float deltaTime)
         {
@@ -433,6 +466,13 @@ namespace PhysicsSimulation
                 }
 
                 if (_parameters.enableStretchLimit) ClampStretch();
+
+                // 碰撞放在子步最后：“不穿模”是硬保证，不能被后面的限幅拉回几何体里（与布料的约定一致）
+                if (_collisions.Count > 0)
+                {
+                    CollisionPass.ResolveParticles(_collisions, particles, _parameters.collisionThickness,
+                        _localToWorld, _worldToLocal, _spaceIsIdentity);
+                }
             }
         }
 

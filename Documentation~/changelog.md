@@ -1,5 +1,31 @@
 # 更新日志
 
+## [1.3.0] - 2026-10-05
+
+### Added
+- **碰撞代理**：`ICollisionProxy.PushOut(point, skin)` 一个方法就是全部契约。四种纯解析几何 —— 球 / OBB 盒（任意旋转）/ 胶囊（退化轴自动降为球）/ **半空间**平面。详见 [碰撞代理](/collision/)
+- **三条契约**：体外原样返回逐位不变；体内沿穿透最浅方向顶出；方向未定义用固定备用轴 `+Y` 且绝不产生 NaN；`skin < 0` 按 0 处理
+- **两种登记空间**：`Simulation` 与 `World`（质点往返世界空间），可以在同一物体上共存 ⇒ 布料 v1.1.0 的球障碍语义原封不动
+- **`ColliderProxies` 桥接**：从场景 `Collider` 采样；`MeshCollider` / `Terrain` / 禁用的碰撞体返回 `null` 并跳过，**不拿包围盒冒充**
+- **三个求解器统一接入**：`MassSpringSystem` / `ClothSimulation` / `SoftBodySimulation` 都有 `Collisions`、`HasColliders`、`SetSimulationToWorld`；`collisionThickness` 现在是三处都有的参数（默认 0.01 m）
+- **Unity 层开关**：`collideWithSceneColliders`（默认关）、`sceneColliders`、`updateCollidersEveryStep`（默认关）
+- **软体演示改造**：地面换成 Cube + `BoxCollider`；果冻**不钉任何质点**，自由落体砸地上（实测最低质点停在地面上表面之上正好 0.01 m，体积保持率 0.981）
+- **33 个新测试**（21 几何契约 + 12 集成），含一条与 v1.2.0 布料球障碍算术的逐位对照；全量 **130 通过**
+
+### Changed
+- 布料球障碍迁移进 `CollisionSet`（算术逐位不变，`ObstacleCount` 现在是代理总数）；不再用 `lossyScale / √3` 近似椭球
+- 软体演示果冻从"钉底面 + 横向初速"改为"不钉 + 落体"，`PinMode` 现在能表达"整块自由落地"这个最有说服力的用例
+
+### Performance
+- 本版不做性能工作（并行仍在 v1.4.0）。碰撞 `O(质点 × 代理)`/子步，无代理时整段跳过 ⇒ 默认关 = 零开销
+
+### Fixed
+- 质点弹簧/软体碰撞只顶位置会让法向速度无限累积 ⇒ 现在削掉穿入分量、保留切向
+- 平面按"穿透深度"实现会被高速穿地 ⇒ 改半空间语义
+- `CreatePrimitive(Plane)` 自带 MeshCollider 导致"有地面却穿过去" ⇒ 明确跳过并在 Dump State 报出代理数
+
+---
+
 ## [1.2.0] - 2026-10-05
 
 ### Added

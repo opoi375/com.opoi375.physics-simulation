@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Physics Simulation
   text: Unity 质点弹簧、布料与软体物理模拟工具包
-  tagline: 确定性求解 · 质点弹簧 + PBD 布料 + 体积保持软体 · 半隐式欧拉与距离约束 · 纯逻辑层可单测 —— 从一根会摆的链子、一面会飘的旗，到一块会瘪又会鼓回来的果冻
+  tagline: 确定性求解 · 质点弹簧 + PBD 布料 + 体积保持软体 + 场景碰撞 · 半隐式欧拉与距离约束 · 纯逻辑层可单测 —— 从一根会摆的链子、一面会飘的旗，到一块落在地上会瘪又会鼓回来的果冻
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -17,6 +17,10 @@ hero:
       link: https://github.com/opoi375/com.opoi375.physics-simulation
 
 features:
+  - icon: 🧱
+    title: 场景碰撞（v1.3.0）
+    details: 求解器只认注入的碰撞代理（球 / OBB 盒 / 胶囊 / 半空间），Unity 层负责从 Collider 采样 —— 纯逻辑层不查场景，闭式解断言与逐位复现一条都不丢
+    link: /collision/
   - icon: 🫧
     title: 软体模拟（v1.2.0）
     details: 任意网格自动长出拓扑：焊接顶点成质点、三角形边成结构弹簧、共边对顶点成弯曲弹簧，再加散度定理体积约束 —— 压扁了会自己鼓回来，642 质点 2.745 ms/步
@@ -43,7 +47,7 @@ features:
     link: /mass-spring/
   - icon: 🧪
     title: 确定性、可复现
-    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；97 个 EditMode 测试直接断言离散闭式解与逐位一致
+    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；130 个 EditMode 测试直接断言离散闭式解与逐位一致
     link: /reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmos 可视化
@@ -56,6 +60,6 @@ features:
 
   - icon: 🗺️
     title: Roadmap
-    details: v1.1.0 布料（XPBD 距离约束）已发布 · v1.2.0 软体（散度定理体积约束）已发布 · v1.3.0 Jobs + Burst 并行求解（可选程序集，托管实现留作回退）
+    details: v1.1.0 布料已发布 · v1.2.0 软体已发布 · v1.3.0 碰撞代理 + Collider 桥接已发布 · v1.4.0 Jobs + Burst 并行求解（可选程序集，托管实现留作回退）
     link: /guide/overview
 ---

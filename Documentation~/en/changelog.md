@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.0] - 2026-10-05
+
+### Added
+- **Collision proxies**: `ICollisionProxy.PushOut(point, skin)` — one method is the whole contract. Four analytic shapes: sphere, oriented box (any rotation), capsule (a degenerate axis falls back to a sphere) and a **half-space** plane. See [Collision proxies](/en/collision/)
+- **Three contracts**, red-first if the semantics change: a point outside is returned bit-identical; a point inside exits along the shallowest penetration; undefined direction falls back to `+Y` and never produces NaN; negative `skin` is clamped to 0
+- **Two registration spaces**: `Simulation` and `World` (particles round-trip through world space), which may coexist on one object — so cloth's v1.1.0 sphere obstacles keep working untouched
+- **`ColliderProxies`** samples the scene's `Collider`s; `MeshCollider`, `Terrain` and disabled colliders return `null` and are skipped — **never faked with a bounding box**
+- **All three solvers wired up**: `MassSpringSystem`, `ClothSimulation`, `SoftBodySimulation` each expose `Collisions`, `HasColliders`, `SetSimulationToWorld`; `collisionThickness` (0.01 m) is now a parameter in all three
+- **Behaviour switches**: `collideWithSceneColliders` (off by default), `sceneColliders`, `updateCollidersEveryStep` (off by default)
+- **Soft body demo reworked**: the ground is now a Cube + `BoxCollider`, and the jelly has **zero pinned particles** — it free-falls onto the floor (measured: the lowest particle rests exactly 0.01 m above the surface, volume retention 0.981)
+- **33 new tests** (21 geometry contract + 12 integration), including a bit-for-bit comparison against v1.2.0's cloth sphere arithmetic; **130 passing** in total
+
+### Changed
+- Cloth's sphere obstacles moved into `CollisionSet` (arithmetic bit-identical; `ObstacleCount` now counts proxies); the `lossyScale / √3` ellipsoid approximation is gone
+- The demo jelly went from "pinned bottom + sideways velocity" to "unpinned + free fall", so `PinMode` can now express the most convincing case of all
+
+### Performance
+- No performance work in this release (parallelism still v1.4.0). Collision costs `O(particles × proxies)` per substep and is skipped entirely with zero proxies — off by default means zero overhead
+
+### Fixed
+- Cutting only positions in the Euler integrators let normal velocity accumulate without bound ⇒ the inward component is now removed while the tangent survives
+- The plane implemented as "subtract penetration" got punched through at speed ⇒ it is now a half-space
+- `CreatePrimitive(Plane)` ships a MeshCollider, producing "the floor is right there, why did it fall through" ⇒ skipped explicitly, and Dump State reports how many proxies arrived
+
+---
+
 ## [1.2.0] - 2026-10-05
 
 ### Added

@@ -1,4 +1,31 @@
 # Changelog
+## [1.3.0] - 2026-10-05
+
+### Added
+- **碰撞代理** `Runtime/Collision/`：`ICollisionProxy.PushOut(point, skin)` 一个方法就是全部契约，四种纯解析几何 —— `SphereCollisionProxy` / `BoxCollisionProxy`（OBB，任意旋转）/ `CapsuleCollisionProxy`（退化轴自动降为球）/ `PlaneCollisionProxy`（**半空间**）
+- **三条契约**（改语义会先红）：体外原样返回逐位不变；体内沿穿透最浅方向顶出；方向未定义时用固定备用轴 `+Y` 且**绝不产生 NaN**；`skin` 为负按 0 处理
+- **`CollisionSet`** 按插入顺序遍历 —— 顺序本身就是确定性契约的一部分；`CollisionPass` 提供位置版（布料，PBD 只修位置）与速度版（质点弹簧/软体）两种推进方式
+- **两种登记空间**：`CollisionProxySpace.Simulation`（与求解器局部坐标直接比算）与 `World`（质点变到世界→推出→变回局部）。同一物体上两种可以共存，布料 v1.1.0 的 `obstacles` 因此原封不动继续有效
+- **`ColliderProxies`** 桥接层：从场景 `Collider` 采样成代理。`MeshCollider` / `Terrain` / 被禁用的碰撞体返回 `null` 并跳过，**不拿包围盒冒充**
+- **三个求解器统一接入**：`MassSpringSystem`、`ClothSimulation`、`SoftBodySimulation` 都有 `Collisions` / `HasColliders` / `SetSimulationToWorld(Matrix4x4)`；`MassSpringParameters` 与 `SoftBodyParameters` 新增 `collisionThickness`（默认 0.01 m）
+- **Unity 层开关**：三个 Behaviour 新增 `collideWithSceneColliders`（默认 `false`）、`sceneColliders`、`updateCollidersEveryStep`（默认 `false`）
+- **软体演示场景改造**：地面从 `CreatePrimitive(Plane)`（自带 `MeshCollider`，正好是不支持的那种）换成 Cube + `BoxCollider`；果冻**一个质点都不钉**，整块自由落体砸在地面上
+- **Dump State 新增诊断**：碰撞代理个数、`collideWithSceneColliders` 与列表填充数、质点世界 y 最低/最高值、以及"最低质点高出盒子上表面多少"
+- **33 个新 EditMode 测试**（21 几何契约 + 12 三求解器/桥接集成），含一条把 v1.2.0 布料球障碍算术逐字抄进测试、对 13 个样本比 `BitConverter.SingleToInt32Bits` 的逐位对照；全量 **130 通过**
+
+### Changed
+- **布料球障碍迁移到 `CollisionSet`**：`AddSphereObstacle` 现在登记一条 `Simulation` 空间的 `SphereCollisionProxy`，`ObstacleCount` 变成代理总数。算术逐位不变，`RemoveObstacle` 从 O(n) 扫描变成按索引删除
+- **布料障碍物不再拿 `lossyScale.magnitude / √3` 近似椭球**：改用质点往返世界空间的路径，盒/胶囊是精确的，只有非均匀缩放的球仍取最大外接轴（宁厚勿漏，写在文档里）
+- **软体演示果冻从"钉底面 + 横向初速"改为"不钉 + 落体"**：`initialVelocity` 仍然保留为可序列化字段，因为它同时充当"模拟到底在跑没有"的探针，而 `PinMode` 现在能表达"一块整果冻自由落地"这个最有说服力的用例
+
+### Performance
+- 本版**不做性能工作**（并行求解器仍在 v1.4.0）。碰撞开销为 `O(质点数 × 代理数)` 每子步，纯算术、`updateCollidersEveryStep` 关闭时无分配；代理数为 0 时整段跳过 ⇒ 默认关=零开销
+- 软体 642 质点基准在同机不同负载下复测为 **4.399 ms/步**（均值 4.603），v1.2.0 低负载时记录为 2.745 / 2.814 ms/步 —— 代码路径未变（无代理时碰撞被跳过），差异全部来自机器负载；基准数字对负载敏感，回归门槛只断言"能跑完且不超一帧预算"
+
+### Fixed
+- **质点弹簧/软体碰撞会累积法向速度**：半隐式欧拉没有 PBD 那种 `v = (pos - prev)/h` 回算，只顶位置会让速度每秒加一个 g，跑久了飞走或变 NaN。现在削掉穿入方向的速度分量、保留切向（所以物体会沿斜面滑而不粘）
+- **`PlaneCollisionProxy` 按"穿透深度"实现会被高速穿地**：改为半空间语义 —— 不管穿多深，一律顶回面上 + `skin`
+- **软体被地面吞掉**：`CreatePrimitive(Plane)` 的 MeshCollider 不支持，"场景里明明有地面还是穿过去"是最难查的一类现象。现在 `TryFrom` 跳过它，Dump State 直接报出实际收到几个代理
 
 ## [1.2.0] - 2026-10-05
 

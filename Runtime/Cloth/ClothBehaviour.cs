@@ -51,6 +51,15 @@ namespace PhysicsSimulation
         [Tooltip("障碍物没有 SphereCollider 时的回退半径（米）")]
         public float obstacleRadiusFallback = 0.25f;
 
+        [Tooltip("让场景里的 Collider 参与碰撞（本版只解析球/盒/胶囊；MeshCollider 会被跳过）。默认关：旧场景的行为不该因为升级就变")]
+        public bool collideWithSceneColliders = false;
+
+        [Tooltip("collideWithSceneColliders 为真时参与碰撞的 Collider 列表（世界空间，不需要折算）")]
+        public List<Collider> sceneColliders = new List<Collider>();
+
+        [Tooltip("每步重读一次 Collider 列表（会分配内存）；碰撞体会动、会开关时再开")]
+        public bool updateCollidersEveryStep = false;
+
         [Tooltip("自动生成/更新网格（关掉就只跑模拟，自己拿质点数据画东西）")]
         public bool generateMesh = true;
 
@@ -61,6 +70,7 @@ namespace PhysicsSimulation
         public bool drawGizmoWireframe = true;
 
         ClothSimulation _system;
+        bool _collidersSynced;        // Collider 列表同步一次标记，重建时重置
         MeshFilter _filter;
         Mesh _mesh;
         Vector3[] _vertices;
@@ -102,6 +112,7 @@ namespace PhysicsSimulation
             try
             {
                 _system = new ClothSimulation(parameters);
+                _collidersSynced = false;
                 ApplyPins(_system, pinEdges);
             }
             catch (Exception e)
@@ -121,11 +132,33 @@ namespace PhysicsSimulation
             if (!IsBuilt) return;
 
             RefreshObstacles();
+            SyncSceneColliders();
 
             if (windAcceleration != Vector3.zero) _system.AddWindImpulse(windAcceleration, dt);
 
             _system.Step(dt);                       // 非法 dt 由系统报错，不吞异常（吞了就只能靠猜了）
             WritePositions();
+        }
+
+        /// <summary>
+        /// 把组件变换与 Collider 列表同步给求解器。
+        /// 没开 collideWithSceneColliders 时注入单位矩阵，于是逐位等价于 v1.1.0/v1.2.0 的布料。
+        /// 旧的 <c>obstacles</c>（模拟空间球）与这批世界空间代理可以同时生效，互不干扰。
+        /// </summary>
+        void SyncSceneColliders()
+        {
+            if (_system == null) return;
+            if (!collideWithSceneColliders)
+            {
+                _system.SetSimulationToWorld(Matrix4x4.identity);
+                return;
+            }
+            _system.SetSimulationToWorld(transform.localToWorldMatrix);
+            if (updateCollidersEveryStep || !_collidersSynced)
+            {
+                ColliderProxies.RefreshInto(sceneColliders, _system.Collisions);
+                _collidersSynced = true;
+            }
         }
 
         /// <summary>回到初始网格布局、速度清零（钉住状态保留）。</summary>
@@ -188,7 +221,8 @@ namespace PhysicsSimulation
         {
             if (!obtainObstaclesFromTransforms || _system == null) return;
 
-            _system.ClearObstacles();
+            // 只清自己这批模拟空间的球，别把桥接进来的世界空间碰撞体一起清掉
+            _system.Collisions.ClearSimulationSpace();
             float invMyScale = 1f / Mathf.Max(1e-4f, transform.lossyScale.magnitude / 1.7320508f);
 
             for (int i = 0; i < obstacles.Count; i++)

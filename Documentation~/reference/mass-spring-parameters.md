@@ -14,6 +14,7 @@
 | `globalDamping` | float | `0.5` | 1/s | 全局线性阻尼，写成除数 `(1 + c·dt)`，不会反号 |
 | `substeps` | int | `8` | 个 | 一个 `FixedUpdate` 均分成几份积分。稳定性主要靠它，成本线性上升 |
 | `maxDeltaTime` | float | `1/15` | s | 单步 dt 上限（钳制） |
+| `collisionThickness` | float | `0.01` | m | **（v1.3.0）** 质点与碰撞代理之间的皮肤厚度；世界空间代理会按缩放折算。见[碰撞代理](/collision/) |
 
 ### 质点列表 `particles`
 

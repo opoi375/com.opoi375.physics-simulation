@@ -110,6 +110,37 @@ namespace PhysicsSimulation
             }
         }
 
+        // ------------------------------------------------------------ 碰撞代理（v1.3.0）
+
+        private readonly CollisionSet _collisions = new CollisionSet();
+        private Matrix4x4 _localToWorld = Matrix4x4.identity;
+        private Matrix4x4 _worldToLocal = Matrix4x4.identity;
+        private bool _spaceIsIdentity = true;
+
+        /// <summary>碰撞代理列表。加了就会在每个子步积分后生效，不加则逐位等价于 v1.0.0。</summary>
+        public CollisionSet Collisions { get { return _collisions; } }
+
+        /// <summary>有没有碰撞体。</summary>
+        public bool HasColliders { get { return _collisions.Count > 0; } }
+
+        /// <summary>模拟空间到世界的变换（不设置就是单位矩阵）。</summary>
+        public Matrix4x4 SimulationToWorld { get { return _localToWorld; } }
+
+        /// <summary>告知求解器它的坐标相对世界怎么摆；只有登记成世界空间的代理会用到。</summary>
+        public void SetSimulationToWorld(Matrix4x4 localToWorld)
+        {
+            if (localToWorld == Matrix4x4.identity)
+            {
+                _localToWorld = Matrix4x4.identity;
+                _worldToLocal = Matrix4x4.identity;
+                _spaceIsIdentity = true;
+                return;
+            }
+            _localToWorld = localToWorld;
+            _worldToLocal = localToWorld.inverse;
+            _spaceIsIdentity = false;
+        }
+
         /// <summary>
         /// 推进一个时间步：dt 先钳到 <see cref="MassSpringParameters.maxDeltaTime"/>，再均分成子步逐步积分。
         /// dt 非有限正数会抛 <see cref="ArgumentOutOfRangeException"/>，且抛出前不改动系统。
@@ -131,6 +162,14 @@ namespace PhysicsSimulation
                 for (int i = 0; i < _particles.Count; i++)
                 {
                     MassSpringIntegrator.Integrate(_particles[i], subStepDeltaTime, Parameters.globalDamping);
+                }
+
+                // 碰撞放在积分之后、下一个子步之前：半隐式欧拉没有 PBD 那种“用位置回算速度”，
+                // 只顶位置会把法向速度越积越多，所以 ResolveParticles 里会一并削掉往几何体里扎的那份速度。
+                if (_collisions.Count > 0)
+                {
+                    CollisionPass.ResolveParticles(_collisions, _particles, Parameters.collisionThickness,
+                        _localToWorld, _worldToLocal, _spaceIsIdentity);
                 }
             }
         }

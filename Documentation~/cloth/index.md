@@ -59,9 +59,12 @@ public class Flag : MonoBehaviour
 常用方法：`Rebuild()`（改完参数重建）、`Step(dt)`、`ResetToInitialLayout()`、`CaptureCurrentAsInitial()`（把当前姿态设为初始姿态）、
 `CollectStructuralEdges(...)`（拿结构边做调试绘制）、`System` / `IsBuilt` / `LastBuildError` / `Mesh`。
 
-::: tip 障碍物是"世界坐标进、局部坐标算"
-`ClothBehaviour` 每帧把障碍 `Transform` 换算到布料局部空间再喂给 `ClothSimulation.AddSphereObstacle`，
-所以把球拖远、缩放、甚至挂在会动的父节点上都能正确裹住。
+::: tip 障碍物：v1.1.0 的球在局部空间，v1.3.0 的场景 Collider 在世界空间
+`ClothSimulation.AddSphereObstacle(center, radius)` 现在登记一条 **`Simulation` 空间**的 `SphereCollisionProxy`：
+坐标与质点同样在布料局部空间，`ObstacleCount` 则是**代理总数**（含桥接进来的世界 Collider）。
+另一条路是 `collideWithSceneColliders` + `sceneColliders` —— `ClothBehaviour` 把场景 `Collider` 采样成 **`World` 空间**代理，
+每条世界代理让质点"变到世界 → 推出 → 变回局部"。于是 Box / Capsule 是精确的（v1.2.0 之前只能拿球，
+还得用 `lossyScale / √3` 近似被非均匀缩放弄歪的椭球）。两条路可以共存，`Step` 内按 `Collisions` 插入顺序遍历，确定性不变。
 :::
 
 ## 3. 拓扑：三种约束
@@ -107,7 +110,7 @@ public class Flag : MonoBehaviour
 
 基准用例本身就是回归门槛：`Benchmark_32x32_ManagedSolverFitsInsideOneFrame`（< 8 ms）与
 `Benchmark_64x64_ManagedSolverStaysWithinTwoFrames`（< 33 ms）。
-`v1.3.0` 的 Jobs + Burst 可选程序集就是冲着把 64×64 压进一帧去的。
+`v1.4.0` 的 Jobs + Burst 可选程序集就是冲着把 64×64 压进一帧去的（v1.3.0 先做了碰撞，本版没有动性能）。
 
 ## 6. 编辑器工具
 

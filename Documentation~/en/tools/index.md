@@ -81,9 +81,9 @@ Menus live under **Tools → Physics Simulation → Soft Body**, priority 120–
 
 | Menu | Priority | What it does | Writes to disk |
 | --- | --- | --- | --- |
-| Create Soft Body Demo Scene | 120 | New scene → blue jelly (bottom pinned, 2.4 m/s sideways kick) + orange bag (top pinned, 2.2 m/s swing) + ground, camera, light → saved as `Assets/Scenes/SoftBodyDemo.unity` | ✅ silently |
+| Create Soft Body Demo Scene | 120 | New scene → blue jelly (**zero pinned particles**, free-falls onto the floor) + orange bag (top pinned, 2.2 m/s swing) + **ground as a Cube with a BoxCollider** + camera and light → saved as `Assets/Scenes/SoftBodyDemo.unity` | ✅ silently |
 | Build In Current Scene | 121 | Adds both soft bodies to the scene you already have open | ❌ marks dirty only |
-| Dump State | 122 | Logs, for **every** `SoftBodyBehaviour`: `enabled` / `autoSimulate` / `activeInHierarchy` / `IsBuilt`, particle and constraint counts, volume retention, max stretch ratio, max speed | ❌ |
+| Dump State | 122 | Logs, for **every** `SoftBodyBehaviour`: `enabled` / `autoSimulate` / `activeInHierarchy` / `IsBuilt`, particle and constraint counts, volume retention, max stretch ratio, max speed, **collision proxy count**, **lowest/highest particle world y** and how far the lowest sits above the box ground surface | ❌ |
 
 Deliberate choices, each one earned by a bug:
 
@@ -113,4 +113,4 @@ Dump State is the tool to reach for when "nothing is moving": it tells you wheth
 | `SoftBodyUnityLayerTests.cs` | 11 | `SoftBodyBehaviour` local space, verbatim topology copy, four pin modes, `initialVelocity`, silent build failures |
 | `SoftBodyDemoToolsTests.cs` | 7 | demo jelly structure and kick, 180 steps without exploding, material source, procedural box winding and volume |
 
-97 EditMode tests in total.
+130 EditMode tests in total (v1.3.0 added 33 collision tests: 21 geometry-contract + 12 integration across the three solvers and the Collider bridge).

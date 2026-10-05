@@ -87,7 +87,39 @@ namespace PhysicsSimulation
         private void FixedUpdate()
         {
             if (_system == null && !Rebuild()) return;
+            SyncSceneColliders();
             _system.Step(Time.fixedDeltaTime);
+        }
+
+        [Tooltip("让场景里的 Collider 参与碰撞（本版只解析球/盒/胶囊；MeshCollider 会被跳过）。默认关：不该因为升级就改变现有场景")]
+        public bool collideWithSceneColliders = false;
+
+        [Tooltip("collideWithSceneColliders 为真时参与碰撞的 Collider 列表（世界空间）")]
+        public System.Collections.Generic.List<Collider> sceneColliders = new System.Collections.Generic.List<Collider>();
+
+        [Tooltip("每步重读一次 Collider 列表（会分配内存）；碰撞体会动、会开关时再开")]
+        public bool updateCollidersEveryStep = false;
+
+        bool _collidersSynced;
+
+        /// <summary>
+        /// 把组件变换与 Collider 列表同步给系统。没开开关时注入单位矩阵，
+        /// 于是默认路径逐位等价于 v1.0.0（一条回归测试专门锁这件事）。
+        /// </summary>
+        void SyncSceneColliders()
+        {
+            if (_system == null) return;
+            if (!collideWithSceneColliders)
+            {
+                _system.SetSimulationToWorld(Matrix4x4.identity);
+                return;
+            }
+            _system.SetSimulationToWorld(transform.localToWorldMatrix);
+            if (updateCollidersEveryStep || !_collidersSynced)
+            {
+                ColliderProxies.RefreshInto(sceneColliders, _system.Collisions);
+                _collidersSynced = true;
+            }
         }
 
         /// <summary>
@@ -98,6 +130,7 @@ namespace PhysicsSimulation
             try
             {
                 _system = MassSpringBuilder.Build(particles, springs, gravity, globalDamping, substeps, maxDeltaTime);
+                _collidersSynced = false;
                 _lastBuildError = null;
                 return true;
             }

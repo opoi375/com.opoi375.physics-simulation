@@ -40,6 +40,27 @@ Debug.Log($"摆锤位置 {system.Particles[bob].position}，最大速度 {system
 `AddSpring` 里 `restLength <= 0` 表示"按两端**当前**距离自动算"。手动量一遍再填数是最常见的错（差 1 厘米，链子一开场就自己晃）。要显式控制就直接填正数。
 :::
 
+## 让它落在地上（v1.3.0）
+
+三个组件共用同一组开关：
+
+```csharp
+massSpring.collideWithSceneColliders = true;
+cloth.collideWithSceneColliders = true;
+soft.collideWithSceneColliders = true;
+// 谁的 sceneColliders 就填谁的 List<Collider>，例如地面
+soft.sceneColliders = new List<Collider> { ground.GetComponent<BoxCollider>() };
+```
+
+::: warning 地面不能是 `CreatePrimitive(Plane)`
+Plane 自带 **MeshCollider**，而本版只做 primitive 解析碰撞（球 / OBB 盒 / 胶囊 / 半空间），
+`MeshCollider` 会被 `ColliderProxies.TryFrom` 返回 `null` 跳过 —— 结果就是"场景里明明有地面，还是穿过去"。
+用 Cube + `BoxCollider` 当本地面，或直接给逻辑层喂一个 `PlaneCollisionProxy`。
+:::
+
+默认 `false`：不注入变换矩阵、不生成代理，于是模拟与 v1.2.0 **逐位一致**。想确认到底有没有生效，
+用 `Tools ▸ Physics Simulation ▸ Soft Body ▸ Dump State`，它会报出代理个数与"最低质点高出地面上表面多少"。
+
 ## 让它动起来：三种驱动方式
 
 | 方式 | 怎么做 | 适用 |

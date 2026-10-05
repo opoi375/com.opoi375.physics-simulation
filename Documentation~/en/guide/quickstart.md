@@ -29,9 +29,34 @@ int anchor = system.AddParticle(new Vector3(0f, 3f, 0f), mass: 1f, pinned: true)
 int bob    = system.AddParticle(new Vector3(0.6f, 2.6f, 0f), mass: 0.8f);
 system.AddSpring(anchor, bob, restLength: 0f, stiffness: 900f, damping: 1.5f);  // restLength <= 0 → auto
 
+// optional since v1.3.0: let the particles land on scene shapes
+system.Collisions.Add(new PlaneCollisionProxy(Vector3.zero, Vector3.up), CollisionProxySpace.World);
+
 system.Step(Time.fixedDeltaTime);
 Debug.Log($"bob {system.Particles[bob].position}, max speed {system.MaxSpeed():F3} m/s");
 ```
+
+## Landing on the floor (v1.3.0)
+
+All three components share one set of switches:
+
+```csharp
+massSpring.collideWithSceneColliders = true;
+cloth.collideWithSceneColliders = true;
+soft.collideWithSceneColliders = true;
+soft.sceneColliders = new List<Collider> { ground.GetComponent<BoxCollider>() };
+```
+
+::: warning The floor must not be a `CreatePrimitive(Plane)`
+A Plane ships with a **MeshCollider**, and this release is primitive-analytic only (sphere / oriented box /
+capsule / half-space) — `ColliderProxies.TryFrom` returns `null` for a MeshCollider and it gets skipped. The result
+is the nastiest possible symptom: "the floor is right there, and it still fell through". Use a Cube with a
+`BoxCollider` as the ground, or feed the logic layer a `PlaneCollisionProxy` directly.
+:::
+
+Off is the default: no transform matrix is injected and no proxies exist, so the simulation stays **bit-identical**
+to v1.2.0. To check whether it actually took effect, run `Tools ▸ Physics Simulation ▸ Soft Body ▸ Dump State`, which
+prints the proxy count and how far the lowest particle sits above the ground surface.
 
 ::: tip Why `restLength = 0`
 In `AddSpring`, `restLength <= 0` means "use the current distance between the two endpoints". Measuring and typing it by hand is the number-one cause of a chain that jiggles on its own from frame one.

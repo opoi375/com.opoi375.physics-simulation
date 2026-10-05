@@ -29,6 +29,7 @@
 | `volumeDamping` | 20 | `>= 0` | 体积变化率阻尼 `c_v·dV/dt`，防止充气过度来回鼓 |
 | `substeps` | 4 | `>= 1` | 一个 `Step(dt)` 内切几个小步。**提高它比提高刚度划算** |
 | `maxDeltaTime` | 1/15 | 有限且 `> 0` | `ClampDeltaTime(dt)` 上限，卡顿一帧也不会把软体炸掉 |
+| `collisionThickness` | 0.01 | 有限且 `>= 0` | **（v1.3.0）** 质点皮肤厚度。软体落地时"最低质点高出地面上表面多少"就等于这个数 |
 | `weldTolerance` | 1e-4 | 有限且 `> 0` | 顶点焊接容差（米）。小于它的重复顶点合并成一个质点 |
 | `enableStretchLimit` | true | — | 是否做最大拉伸限幅 |
 | `maxStretchRatio` | 2 | `> 1` | 结构弹簧允许的最大长度比，超限后 8 趟 Gauss-Seidel 位置投影 |

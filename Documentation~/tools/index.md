@@ -82,9 +82,9 @@
 
 | 菜单 | 优先级 | 做什么 | 会写盘吗 |
 | --- | --- | --- | --- |
-| Create Soft Body Demo Scene | 120 | 新建场景 → 蓝色果冻（底面钉住 + 横向初速 2.4 m/s）+ 橙色袋子（顶面钉住 + 纵向初速 2.2 m/s）+ 地面相机灯光 → 存成 `Assets/Scenes/SoftBodyDemo.unity` | ✅ 会（静默存盘） |
+| Create Soft Body Demo Scene | 120 | 新建场景 → 蓝色果冻（**不钉任何质点**，自由落体砸地面）+ 橙色袋子（顶面钉住 + 纵向初速 2.2 m/s）+ **地面（Cube + BoxCollider）** + 相机灯光 → 存成 `Assets/Scenes/SoftBodyDemo.unity` | ✅ 会（静默存盘） |
 | Build In Current Scene | 121 | 只在当前场景加这两块软体 | ❌ 不写盘，只标脏 |
-| Dump State | 122 | 打印场景里**每一个** `SoftBodyBehaviour` 的 `enabled` / `autoSimulate` / `activeInHierarchy` / `IsBuilt`、质点与三类约束数量、体积保持率、最大拉伸比、最大速度 | ❌ |
+| Dump State | 122 | 打印场景里**每一个** `SoftBodyBehaviour` 的 `enabled` / `autoSimulate` / `activeInHierarchy` / `IsBuilt`、质点与三类约束数量、体积保持率、最大拉伸比、最大速度、**碰撞代理个数**、**质点世界 y 最低/最高值**与"最低质点高出盒子上表面多少" | ❌ |
 
 演示里两个刻意的设计，都是踩出来的：
 
@@ -92,6 +92,9 @@
   会拿源网格重建模拟，扰动一瞬间丢光，画面就成了静态。所以初速度必须是可序列化的字段。
 - **刚度调到 130 而不是默认 1200**。默认值很硬（0.8 kg 只沉 6 mm），演示要一眼看出"软"。
 - 材质与布料演示共用同一套管线默认材质逻辑（见上一节），同样**不能**标 `HideFlags.DontSave`。
+- **地面必须是 BoxCollider，不能是 `CreatePrimitive(Plane)`**。Plane 自带 MeshCollider，而 v1.3.0 只做 primitive 解析碰撞、
+  明确不支持 MeshCollider（也不会拿包围盒冒充）。用 Plane 的结果就是"场景里明明有地面，果冻还是穿过去"——最难查的一类现象。
+  果冻的 `collideWithSceneColliders` 打开、`sceneColliders` 填地面，于是它能整块落地。
 
 `Dump State` 是"画面不动"的第一现场工具：它会直接告诉你模拟到底在不在跑（最大速度是不是 0）。
 
@@ -113,4 +116,4 @@
 | `SoftBodyUnityLayerTests.cs` | 11 | `SoftBodyBehaviour` 局部空间、实例网格拓扑照抄、四种钉法、`initialVelocity`、构建失败静默 |
 | `SoftBodyDemoToolsTests.cs` | 7 | 演示果冻结构与初速、180 步不炸且体积不塌、材质来源、程序化长方体绕序与体积 |
 
-合计 97 个 EditMode 测试。
+合计 **130** 个 EditMode 测试（v1.3.0 新增 33 个碰撞测试：21 条几何契约 + 12 条三求解器与 Collider 桥接集成）。

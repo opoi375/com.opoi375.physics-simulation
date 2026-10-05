@@ -46,6 +46,16 @@ namespace PhysicsSimulation
         [Tooltip("Top/BottomVertices 判定“这一层”的厚度容差（米）")]
         public float pinLayerThickness = 1e-3f;
 
+        [Tooltip("让场景里的 Collider 参与碰撞（本版只解析球/盒/胶囊；MeshCollider 会被跳过）。" +
+                 "默认关：开上来就改变现有场景的行为，比漏一个碰撞更难查")]
+        public bool collideWithSceneColliders = false;
+
+        [Tooltip("collideWithSceneColliders 为真时参与碰撞的 Collider 列表")]
+        public List<Collider> sceneColliders = new List<Collider>();
+
+        [Tooltip("每步重读一次 Collider 列表（会分配内存）；碰撞体会动、会开关时再开")]
+        public bool updateCollidersEveryStep = false;
+
         [Tooltip("关掉后由外部调 Step(dt)，用于定步长、回放或网络同步")]
         public bool autoSimulate = true;
 
@@ -64,6 +74,7 @@ namespace PhysicsSimulation
         public Vector3 initialVelocity = Vector3.zero;
 
         SoftBodySimulation _simulation;
+        bool _collidersSynced;        // Collider 列表负一次同步（重建时重置，免得拿着旧列表不放）
         Mesh _mesh;
         Vector3[] _scratch;
 
@@ -127,8 +138,10 @@ namespace PhysicsSimulation
                 simulation.Build(data);
 
                 _simulation = simulation;
+                _collidersSynced = false;
                 ApplyPinning();
                 ApplyInitialVelocity();
+                SyncColliders();
                 EnsureInstanceMesh();
                 WriteBack();
             }
@@ -244,8 +257,26 @@ namespace PhysicsSimulation
         public void Step(float deltaTime)
         {
             if (!IsBuilt) return;
+            SyncColliders();
             _simulation.Step(deltaTime);
             WriteBack();
+        }
+
+        /// <summary>
+        /// 把组件的变换与 Collider 列表同步给求解器。
+        /// 没开 collideWithSceneColliders 时一律不注入变换矩阵——保证默认路径与 v1.2.0 逐位一致。
+        /// </summary>
+        void SyncColliders()
+        {
+            if (_simulation == null) return;
+            if (!collideWithSceneColliders)
+            {
+                _simulation.SetSimulationToWorld(Matrix4x4.identity);
+                return;
+            }
+            _simulation.SetSimulationToWorld(transform.localToWorldMatrix);
+            if (updateCollidersEveryStep || !_collidersSynced) ColliderProxies.RefreshInto(sceneColliders, _simulation.Collisions);
+            _collidersSynced = true;
         }
 
         /// <summary>回到构建时的初始布局。</summary>
