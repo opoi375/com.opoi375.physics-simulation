@@ -31,11 +31,12 @@ namespace PhysicsSimulation.EditorTools
         [MenuItem("Tools/Physics Simulation/Soft Body/Create Soft Body Demo Scene", false, 120)]
         public static void CreateSoftBodyDemoScene()
         {
-            // 静默存盘：绝不能用 SaveCurrentModifiedScenesIfUserWantsTo —— 它会弹模态框，
-            // 从自动化（ExecuteMenuItem / CI）里调用时没人点那个框，编辑器主线程就永久堵死了。
-            if (!EditorSceneManager.SaveOpenScenes())
+            // 静默存盘：EditorSceneManager.SaveOpenScenes() 对没有文件路径的场景会弹系统对话框，
+            // 从自动化（ExecuteMenuItem / REST / CI）里调用时没人点那个框，主线程就永久堵死了。
+            // 所以走 DemoSceneSave —— 它只保存有路径的场景，其余跳过并提示。
+            if (!DemoSceneSave.SaveOpenScenesWithoutPrompting())
             {
-                Debug.LogWarning("[PhysicsSimulation] 有场景没能保存，仍继续生成软体演示场景。");
+                Debug.LogWarning("[PhysicsSimulation] 有未保存且没有路径的场景，仍继续生成软体演示场景。");
             }
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -48,8 +49,7 @@ namespace PhysicsSimulation.EditorTools
             SetupCameraAndLight(jelly.transform.position, bag.transform.position);
 
             AssetDatabase.Refresh();
-            EditorSceneManager.SaveOpenScenes();
-            EditorSceneManager.SaveScene(scene, ScenePath);
+            EditorSceneManager.SaveScene(scene, ScenePath);   // 显式路径，不弹框
 
             var system = jelly.Simulation;
             Debug.Log("[PhysicsSimulation] 软体演示场景已生成：" + ScenePath

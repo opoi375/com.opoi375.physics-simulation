@@ -115,8 +115,13 @@ Measured by the EditMode benchmark tests in the package: Unity Editor, Mono mana
 | 32 × 32 | 1,024 | 5,826 | **4.65 ms/step** | 4.95 ms/step | Cape/flag tier, fits inside one frame |
 | 64 × 64 | 4,096 | 23,938 | **20.2 ms/step** | 20.5 ms/step | Stress tier, roughly two frames per step at 60 fps |
 
-The benchmarks double as regression gates: `Benchmark_32x32_ManagedSolverFitsInsideOneFrame` (< 8 ms) and
-`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames` (< 33 ms). The optional Jobs + Burst assembly planned for `v1.5.0`
+The benchmarks double as regression gates: `Benchmark_32x32_ManagedSolverFitsInsideOneFrame` (< 20 ms) and
+`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames` (< 66 ms). Those two are now **order-of-magnitude guards only**:
+the same code measured 7.73 / 32.36 ms on a loaded machine, which pierced the old 8 ms and 33 ms gates — they were
+measuring how idle the box is, not whether the solver regressed. The real complexity gate is
+`Benchmark_ClothCostScalesNearLinearlyWithParticleCount`, which uses a **ratio**: 32×32 (1024 particles) against
+64×64 (4096), four times the particles and four times the constraints, so linear scaling is ~4× the time while an
+O(n²) regression would approach 16× (gate: 12). Background load multiplies into both sizes and cancels in the ratio. The optional Jobs + Burst assembly planned for `v1.6.0`
 exists to push 64 × 64 back under a single frame.
 
 ## 6. Editor tools

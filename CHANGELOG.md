@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.5.0] - 2026-10-06
+
+### Added
+- **PBF fluid solver** under `Runtime/Fluid/`: `FluidKernel` (poly6 / spiky gradient / viscosity laplacian, with normalisation pinned by **analytic integral** tests), `FluidNeighborSearch` (uniform hash grid + CSR table, bit-deterministic rebuild), `FluidVolume` (box / sphere / cylinder / dam-break sampling with budget-truncation reporting), `FluidSimulation` (density-constraint projection, double-density correction, tensile clamping, XSPH viscosity, vorticity confinement, substepping and dt clamping; collision reuses the v1.3.0 `CollisionSet`)
+- **`FluidBehaviour`**: world↔local conversion (particles live in **world space** — there is no velocity re-derivation after projection, so local space would add a g every frame), automatic Collider bridging, and **`Graphics.DrawMeshInstanced` rendering** (no 100k-triangle mesh; one shared `Mesh`, one shared `Material`)
+- **Fluid editor tools (130~132)**: `Create Fluid Demo Scene` / `Build Fluid In Current Scene` / `Dump State`; the demo scene is a **sealed tank with a dam-break column**
+- **`DemoSceneSave`**: the single save path for every demo tool — aborts with a clear error on untitled scenes instead of opening a dialog — guarded by a repository-wide source scan test
+- **`BoxContainerProxy`** (inside-out box): points inside are returned bit-identical, points outside are pinned **per axis** back to the nearest inner wall (minimum-displacement projection onto a convex set). It is the only `ICollisionProxy` that deliberately inverts the "outside means unchanged" contract, and the reason is measured - see the leak entry below
+- **`enableBoxContainer` / `containerCenter` / `containerHalfSize` on `FluidBehaviour`**: the container is re-added inside `Rebuild()`, because a proxy attached by hand is dropped when entering Play
+- **Four documentation pages (zh + en)**: the fluid module page (PBF pipeline, kernel normalisation, the three fuses, rendering and materials, the tank-seam lesson, measured costs) and the fluid parameter reference
+- **68 new EditMode tests** (9 kernel + 8 neighbour search + 6 volume shapes + 24 solver + 10 Unity layer + 9 demo tools + 2 save path), plus one `maxDeltaTime` case added for cloth; **270 passing** in total (170 at v1.4.0 + 68 fluid/save-path + 1 cloth dt case + 1 soft body scaling benchmark + 19 surface + 2 tank seal + 6 container proxy + 2 container layer + 1 camera framing)
+
+### Fixed
+- **Wrong kernel normalisation**: poly6 used h⁷ (should be h⁹) and the spiky gradient / viscosity laplacian used 45/(πh⁷) (should be 45/(πh⁶)). Consequence: a resting block reported a density ratio of 7.1 instead of ~1.0 and pancaked on frame one — all three integrals now have analytic tests
+- **`_stamp` was not cleared when rebuilding the neighbour table**: last round's neighbours were read as this round's, so viscosity operated on a stale neighbour set
+- **Wrong scale and relaxation form in the PBF projection**: the displacement was missing the mass factor, λ's denominator was missing the sum, and velocity was not recomputed as `(x − x_prev)/dt` after projection — roughly 420,000× too much movement per iteration
+- **`FluidParameters.Validate()` branch order** silently discarded out-of-range inputs
+- **The fluid had no `maxDeltaTime`** (cloth always did): the second-scale `Time.deltaTime` of the first Play-mode frame threw the entire tank 1,651 m — visually, "the tank exploded". All four solvers now share the same semantics
+- **The demo tank had a seam that acted as a one-way trapdoor**: the box proxy pushed particles out under the wall through the wall/floor gap and, with no floor on the outside, they free-falled through the camera (`v ≈ √(2gh)` means leaking, not blowing up). Walls now reach into the floor slab and overlap in plan, pinned by a test
+- **The water column touched the walls**: tangent to three walls and the floor at once, so several axes were equally shallow and the tie-break ejected a particle on frame one. Now 0.08 m of clearance per side
+- **Eye-level camera plus a pool too shallow to be a pool**: the "empty box" screenshot was simply the front wall filling the frame, and the water spread into one layer. The camera now looks down and the pool is at least four particle rows deep, both constants pinned by tests
+- **A closed six-plate tank still leaked (corner conveyor)**: one `BoxCollisionProxy` per plate left 120 of 1540 particles outside after 300 steps (squeezed sideways past the floor edge, then free-fall: `(-0.635, -0.529, -0.964)`, 3.3 -> 4.1 m/s). Six collider-only backstops stopped the escape but parked **150 particles inside the wall slabs, 0.486 m deep**, independent of `dt`. The plates are now visual only and one `BoxContainerProxy` holds the water: 0 outside in 300 steps, 12 proxies -> 1
+- **The demo water column was born inside a wall** (560 of 1540 particles): `DamBreak` centres the body in depth while the offset assumed the minimum corner
+- **Hand-added collision proxies vanished on entering Play** (`OnEnable -> Rebuild()` recreates the `CollisionSet`): the pool fell to `y = -92` with kinetic energy 16904
+- **`EditorSceneManager.SaveOpenScenes()` opens the native Save Scene dialog when an open scene has no path**, dead-locking the main thread when reached from a menu API (the menu appeared to hang for 300 s). All call sites now go through `DemoSceneSave`
+
+### Notes
+- **Burst moved to v1.6.0**: this release shipped fluids, not parallelism. The fluid runs on the managed solver — measured with `d = 0.05 / h = 0.1` fixed: 13.3~21.2 ms/step at 1,000 particles and 64.7~97.7 ms/step at 4,096 (the same case varied 1.6x between runs, hence ratio gates of 4.59~4.88 instead of absolute milliseconds); the demo scale of 1,456 particles (25.1 average neighbours) lands between those rows at roughly 20~60 ms/step, which will not fit 2 substeps x 2 iterations into one 60 fps frame
+- **Benchmark gates changed shape**: the soft body absolute `8 ms` gate had been pierced by identical code on a loaded machine (9.4 / 9.5 ms, red) — it measured how idle the machine is, not whether the solver regressed. Fixed in this release: the two fluid benchmarks assert a *size ratio* only (measured 4.59~5.75 against a gate of 12), soft body keeps a 20 ms hard ceiling and gains `Benchmark_SoftBodyCostScalesNearLinearlyWithParticleCount` (162 vs 642 particles, ratio measured 5.99~6.33). The cloth 64×64 33 ms gate measured 32.36 ms on a loaded run — 0.6 ms of margin, a known brittle point whose conversion to a ratio is scheduled for v1.6.0
+- Rendering has two modes: **particles** and an **isosurface water sheet** (marching tetrahedra, not marching cubes, no UF kernel blur); still no surface tension, XSPH is the only viscosity knob
+- The container is **one box** (optionally rotated): the inner surface is a hard boundary, so you cannot model a leak with it, and stacking several containers reintroduces the per-proxy adjudication problem above
+- Still no self-collision (cloth, soft body and fluid alike); scale stays bounded by the managed O(n·k) cost, which is why the demo budget is 1,500 particles
+- `MaxCorrectionPerIterationFactor` is a **mutable static rail**, not a tuning parameter: move it only for diagnostics
+
 ## [1.4.0] - 2026-10-05
 
 ### Added

@@ -22,7 +22,8 @@ function sidebarZh() {
         { text: '软体（Soft Body）', link: '/soft-body/' },
         { text: '从网格到质点（焊接原理）', link: '/soft-body/mesh-to-particles' },
         { text: '真实模型实测', link: '/soft-body/model-audit' },
-        { text: '碰撞代理（Collision）', link: '/collision/' }
+        { text: '碰撞代理（Collision）', link: '/collision/' },
+        { text: '流体模拟（Fluid）', link: '/fluid/' }
       ]
     },
     {
@@ -35,6 +36,7 @@ function sidebarZh() {
         { text: '质点弹簧参数参考', link: '/reference/mass-spring-parameters' },
         { text: '布料参数参考', link: '/reference/cloth-parameters' },
         { text: '软体参数参考', link: '/reference/soft-body-parameters' },
+        { text: '流体参数参考', link: '/reference/fluid-parameters' },
         { text: '更新日志', link: '/changelog' }
       ]
     }
@@ -59,7 +61,8 @@ function sidebarEn() {
         { text: 'Soft Body Simulation', link: '/en/soft-body/' },
         { text: 'Mesh to Particles (welding)', link: '/en/soft-body/mesh-to-particles' },
         { text: 'Real-Model Audit', link: '/en/soft-body/model-audit' },
-        { text: 'Collision Proxies', link: '/en/collision/' }
+        { text: 'Collision Proxies', link: '/en/collision/' },
+        { text: 'Fluid Simulation (PBF)', link: '/en/fluid/' }
       ]
     },
     {
@@ -72,6 +75,7 @@ function sidebarEn() {
         { text: 'Mass-Spring Parameter Reference', link: '/en/reference/mass-spring-parameters' },
         { text: 'Cloth Parameter Reference', link: '/en/reference/cloth-parameters' },
         { text: 'Soft Body Parameter Reference', link: '/en/reference/soft-body-parameters' },
+        { text: 'Fluid Parameter Reference', link: '/en/reference/fluid-parameters' },
         { text: 'Changelog', link: '/en/changelog' }
       ]
     }

@@ -57,7 +57,7 @@ namespace PhysicsSimulation.EditorTools
         /// </summary>
         static bool PrepareForNewScene()
         {
-            if (EditorSceneManager.SaveOpenScenes()) return true;
+            if (DemoSceneSave.SaveOpenScenesWithoutPrompting()) return true;
 
             Debug.LogError("[PhysicsSimulation] 有未保存且没有文件路径的场景，无法静默保存，已中止。" +
                            "请先手动保存或另存该场景，再生成演示场景。");

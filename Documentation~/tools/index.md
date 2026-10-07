@@ -15,13 +15,19 @@
 
 参数细节见 [参数参考 §演示链条的默认参数](/reference/mass-spring-parameters#演示链条的默认参数)。
 
-::: warning 为什么不用 `SaveCurrentModifiedScenesIfUserWantsTo()`
-它会弹模态对话框。从脚本 / 自动化（UnitySkills 的 `ExecuteMenuItem`、CI）里调用时**没人点那个框**，编辑器主线程就永久堵死了。本工具改用静默路径：
+::: warning 为什么所有存盘都走 `DemoSceneSave`
+两个坑，都是真踩出来的：
 
-1. 先 `EditorSceneManager.SaveOpenScenes()` 保存已打开的场景；存不了（未命名场景没有文件路径）就**中止并报错**，不弹框；
-2. 再 `EditorSceneManager.SaveScene(active, "Assets/Scenes/PhysicsDemo.unity")` 存目标场景。
+1. `SaveCurrentModifiedScenesIfUserWantsTo()` 会弹模态确认框。从脚本 / 自动化（UnitySkills 的 `ExecuteMenuItem`、CI）里调用时**没人点那个框**，编辑器主线程就永久堵死。
+2. 换成 `EditorSceneManager.SaveOpenScenes()` 也**不算安全**——v1.5.0 就栽在这里：手上有未命名场景（没有文件路径）时，`SaveOpenScenes()` 会替它**弹出系统"保存场景"对话框**，从菜单 API 调进来同样把主线程堵死，表现为"菜单点了 300 秒超时"，比第 1 个坑更隐蔽，因为它看起来是个"静默"API。
 
-这是卡通渲染包踩过的坑（见其 `CHANGELOG` 1.4.0），这里直接沿用结论。
+所以四个模块的演示工具一律走 `Editor/DemoSceneSave.cs`：
+
+1. `AllOpenScenesHavePaths()` 先检查有没有未保存过的场景，有就**中止并明确报错**（让用户先存或先关掉那个场景），绝不弹框；
+2. 只 `MarkSceneDirty` + `SaveScene(scene)` 那些**有路径**的脏场景；
+3. 最后用 `SaveScene(active, "Assets/Scenes/XXXDemo.unity")` 存目标场景。
+
+`DemoSceneSaveTests` 里除了单测 `CanSaveSilently`（把"全是空白字符的路径"也算未命名，这条是测试逼出来的边界），还有一条**全仓源码扫描**：只要 `Editor/**/*.cs` 里再出现 `EditorSceneManager.SaveOpenScenes(` 或 `SaveCurrentModifiedScenesIfUserWantsTo(`（注释行除外），测试直接红。这条规则本身也比任何一句文档可靠。
 :::
 
 ## Build In Current Scene
@@ -100,6 +106,24 @@
 
 `Dump State` 是"画面不动"的第一现场工具：它会直接告诉你模拟到底在不在跑（最大速度是不是 0）。
 
+## Fluid / 流体工具（v1.5.0）
+
+菜单在 **Tools → Physics Simulation → Fluid** 下，优先级 130~132。
+
+| 菜单项 | 优先级 | 做什么 | 写盘 |
+| --- | --- | --- | --- |
+| Create Fluid Demo Scene | 130 | 新建场景 → **六面密封水箱**（底板 + 四面墙 + 顶盖，带 `BoxCollider`）+ 左侧水柱（溃坝）+ 相机灯光，水体组件默认配成 **`Surface` 水面模式** → 存成 `Assets/Scenes/FluidDemo.unity` | ✅ 经 `DemoSceneSave`，未命名场景先中止 |
+| Build Fluid In Current Scene | 131 | 只在当前场景加水箱与水柱，不动相机灯光 | ❌ 不写盘，只标脏 |
+| Dump State | 132 | 打印每个 `FluidBehaviour` 的质点数 / 平滑长度 / 平均邻居数 / 质量 / 密度比 / 最大速度 / 包围盒 / 是否被预算截断 / 碰撞代理个数 | ❌ |
+
+水箱几何不是随便摆的，`FluidDemoToolsTests` 钉住三件事，每一件都对应一次真实翻车：
+
+- **墙底必须扎进底板、四面墙在平面上必须互相重叠**（`BuildTank_WallsSealTheFloorSeamAndEachOther`）。墙与底板之间只要留一条缝，盒子代理的"最浅穿透轴"就会把水沿墙底往外拱，而墙体外侧没有地板——水会漏下去，然后以自由落体加速度砸穿相机。现场看起来是"水箱爆炸"，实际是一条**单向活门**。修好之前 850 个质点在 23 秒内被甩到 1651 米外。
+- **水柱必须与所有壁留出间隙**（`DemoConfig_ColumnClearsEveryWallSoTheProxyHasNoTies`，单侧 0.08 m）。质点贴在两个面正中间时，代理取"最浅轴"，`distance == 0` 的多面并列会抛向随机一侧，第一帧就有质点被弹飞。
+- **水池要有深度、相机要俯看**（`DemoConfig_PoolIsDeepEnoughAndCameraLooksIntoTheTank`）。齐眼高度的水平相机会被前墙完全挡住——截图里那片"空的盒子"就是这件事；而水池浅于四行质点时水摊成一层，从侧面看等于没有。
+
+这些约束连同数值都写在 `FluidDemoTools` 的常量里，不在场景里手调，所以每次跑菜单都会重建到同一个几何。
+
 ## 运行测试
 
 **Window → General → Test Runner → EditMode**。包是内嵌包（`Packages/` 下），测试会自动出现在列表里，不需要往 `Packages/manifest.json` 的 `testables` 里加东西。
@@ -111,14 +135,26 @@
 | `MassSpringSystemTests.cs` | 6 | 固定点、确定性、参数校验、高刚度 + 子步稳定性、复位、dt 钳制 |
 | `MassSpringUnityLayerTests.cs` | 10 | 配置 → 系统的翻译层、`MassSpringBehaviour` 的重建与错误上报、`Capture Current As Rest` |
 | `MassSpringDemoToolsTests.cs` | 5 | 演示链条结构、k 递减、原长自动、子步够稳、可视化绑定完整 |
-| `ClothSimulationTests.cs` | 16 | 拓扑与索引、三类约束、拉伸限幅、球体障碍永不穿入、风与阻尼、确定性、参数校验 |
+| `FluidKernelTests.cs` | 9 | poly6 / spiky 梯度 / 粘性拉普拉斯的**解析积分与边界**（∫poly6=W(r=0)、∫spiky=W、∇spiky=0 在边界、负半径、归一化系数） |
+| `FluidNeighborSearchTests.cs` | 8 | 均匀哈希 + CSR 表：自匹配排除、半径语义、逐位确定性、**重建后计数表必须清零**（这条测出了粘性的隐藏 bug）、跨格邻居不漏 |
+| `FluidVolumeTests.cs` | 6 | 长方体 / 球 / 柱的采样间距、数量对账、预算截断上报、角点不重复 |
+| `FluidSimulationTests.cs` | 24 | 静止方块密度≈ρ0、受压变密、溃坝向前推、XSPH 不增加动能、涡度不无中生有、拉力钳制、**护栏只兜底不背锅**、`maxDeltaTime` 钳制、**首帧秒级 dt 不把水甩出箱外**、确定性、参数校验 |
+| `FluidSurfaceTests.cs` | 19 | 标量场 splat（峰值/单调衰减/空输入/逐位确定）、等值面几何（**闭合：边界边必须为 0**、顶点不出采样范围、法线朝外、两团水不许搭桥、预算自动放大体素、低阈值必须包住高阈值）、`FluidBehaviour` 三种渲染模式与节流、演示水面常量与六面水箱 |
+| `FluidTankSealTests.cs` | 2 | 300 步内没有任何粒子穿出六面水箱（行为）；单步最大位移（平流 + 约束轨道）必须小于最薄一块板到中线的余量（结构） |
+| `FluidUnityLayer.cs` → `FluidUnityLayerTests.cs` | 10 | `FluidBehaviour` 世界↔局部、代理重同步、预算截断、`DrawMeshInstanced` 不生成网格、`DumpState` 不抛异常 |
+| `FluidDemoToolsTests.cs` | 9 | 预算与实际粒数、六面密封水箱几何（含顶盖贴桶口）、间隙、池深与相机取景、超预算要吭声 |
+| `DemoSceneSaveTests.cs` | 2 | `CanSaveSilently` 边界 + **全仓扫描：绝不允许再出现会弹框的存盘 API** |
+| `ClothSimulationTests.cs` | 18 | 拓扑与索引、三类约束、拉伸限幅、球体障碍永不穿入、风与阻尼、确定性、参数校验 |
 | `ClothUnityLayerTests.cs` | 14 | `ClothBehaviour` 局部空间约定、实例网格写回、钉边、构建失败不抛异常 |
 | `ClothDemoToolsTests.cs` | 6 | 演示布料结构、障碍物世界半径、长时间步进不炸、材质来源、空场景 Dump |
-| `SoftBodySimulationTests.cs` | 16 | 顶点焊接（含格坐标/容差/`float` 精度墙三条边界）、结构/弯曲弹簧拓扑、闭合判定与有向体积、体积保持、`SetVelocity`、参数校验与状态不变性 |
+| `SoftBodySimulationTests.cs` | 17 | 顶点焊接（含格坐标/容差/`float` 精度墙三条边界）、结构/弯曲弹簧拓扑、闭合判定与有向体积、体积保持、`SetVelocity`、参数校验与状态不变性 |
 | `SoftBodyUnityLayerTests.cs` | 11 | `SoftBodyBehaviour` 局部空间、实例网格拓扑照抄、四种钉法、`initialVelocity`、构建失败静默 |
-| `SoftBodyDemoToolsTests.cs` | 7 | 演示果冻结构与初速、180 步不炸且体积不塌、材质来源、程序化长方体绕序与体积 |
+| `SoftBodyDemoToolsTests.cs` | 8 | 演示果冻结构与初速、180 步不炸且体积不塌、材质来源、程序化长方体绕序与体积 |
 
 | `SoftBodyMeshAuditTests.cs` | 22 | 审计契约：判定分级（含 `InvertedWinding` / `DegenerateVolume` 两条漏报回归）、note 列、表格列数不被异常消息撕坏 |
 | `SoftBodyModelAuditToolsTests.cs` | 15 | 网格抽取、预算线筛选、Markdown 报告与分档合计对账、推荐参数缩放、两轮对照 |
 
-合计 **170** 个 EditMode 测试（v1.3.0 新增 33 个碰撞测试；v1.4.0 新增 40 个：22 审计 + 15 扫描工具 + 3 焊接边界）。
+合计 **270** 个 EditMode 测试：质点弹簧 30、布料 38、软体 36、**碰撞 38**、模型审计 22 + 扫描工具 15、**流体 89**（9 核函数 + 8 邻居搜索 + 6 体积形状 + 24 求解器 + 19 水面 + 2 密封 + **12 Unity 层** + 9 演示工具）、存盘口子 2。
+
+::: warning 这张表的数字是**逐文件数出来的**
+上一版写的是 240，并把碰撞记成 33、软体演示记成 7 —— 那两条与测试文件里的实际条数不符（32 与 8）。本版把每一行按 `[Test] + [TestCase]` 静态数过一遍，再与 Test Runner 的运行数对账；两边不一致时以**跑出来的数**为准。（v1.5.0 收尾时又给碰撞代理加了 6 条 `BoxContainerProxy` 用例、给流体加了 2 条容器用例：碰撞 32 → **38**、流体 87 → **89**、合计 262 → **270**，静态逐条相加与 Runner 完全一致。）:::

@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Physics Simulation
-  text: Unity 质点弹簧、布料与软体物理模拟工具包
-  tagline: 确定性求解 · 质点弹簧 + PBD 布料 + 体积保持软体 + 场景碰撞 · 半隐式欧拉与距离约束 · 纯逻辑层可单测 —— 从一根会摆的链子、一面会飘的旗，到一块落在地上会瘪又会鼓回来的果冻
+  text: Unity 质点弹簧、布料、软体与流体物理模拟工具包
+  tagline: 确定性求解 · 质点弹簧 + PBD 布料 + 体积保持软体 + 场景碰撞 + PBF 流体 · 半隐式欧拉与距离/密度约束 · 纯逻辑层可单测 —— 从一根会摆的链子、一面会飘的旗、一块会鼓回来的果冻，到一坨会塌开的水
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -17,6 +17,10 @@ hero:
       link: https://github.com/opoi375/com.opoi375.physics-simulation
 
 features:
+  - icon: 💧
+    title: 流体模拟（v1.5.0）
+    details: PBF（Position Based Fluids）—— 均匀网格哈希 + CSR 邻居表、poly6/spiky 核、密度约束投影、拉力钳制与位移护栏；1456 粒的溃坝演示跑在托管求解器上（基准实测：1000 粒 13~21 ms、4096 粒 65~97 ms 每步），`DrawMeshInstanced` 渲染不生成十万面网格
+    link: /fluid/
   - icon: 🧱
     title: 场景碰撞（v1.3.0）
     details: 求解器只认注入的碰撞代理（球 / OBB 盒 / 胶囊 / 半空间），Unity 层负责从 Collider 采样 —— 纯逻辑层不查场景，闭式解断言与逐位复现一条都不丢
@@ -47,7 +51,7 @@ features:
     link: /mass-spring/
   - icon: 🧪
     title: 确定性、可复现
-    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；170 个 EditMode 测试直接断言离散闭式解与逐位一致
+    details: 无 Random / 无 Time / 无并行，同参数同步数跑两次逐位一致；270 个 EditMode 测试直接断言离散闭式解、核函数解析值、等值面闭合与逐位一致
     link: /reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmos 可视化
@@ -55,11 +59,11 @@ features:
     link: /tools/
   - icon: 🛠️
     title: 编辑器工具三件套 × 三套
-    details: Tools > Physics Simulation >（质点弹簧 100~103）、Cloth（110~112）、Soft Body（120~122）各自的 Create Demo Scene / Build In Current Scene / Dump State，静默存盘不弹模态框
+    details: Tools > Physics Simulation >（质点弹簧 100~103）、Cloth（110~112）、Soft Body（120~124）、Fluid（130~132）各自的 Create Demo Scene / Build In Current Scene / Dump State；存盘一律走 DemoSceneSave，绝不弹系统对话框
     link: /tools/
 
   - icon: 🗺️
     title: Roadmap
-    details: v1.1.0 布料 · v1.2.0 软体 · v1.3.0 碰撞代理 + Collider 桥接 · v1.4.0 模型审计（真实网格逐网格判定）均已发布 · v1.5.0 计划 Jobs + Burst 并行求解（可选程序集，托管实现留作回退）
+    details: v1.1.0 布料 · v1.2.0 软体 · v1.3.0 碰撞代理 · v1.4.0 模型审计 · v1.5.0 PBF 流体均已发布 · v1.6.0 计划 Jobs + Burst 并行求解（可选程序集，托管实现留作回退）
     link: /guide/overview
 ---

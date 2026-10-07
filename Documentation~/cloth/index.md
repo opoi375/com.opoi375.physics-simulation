@@ -108,9 +108,13 @@ public class Flag : MonoBehaviour
 | 32 × 32 | 1 024 | 5 826 | **4.65 ms/步** | 4.95 ms/步 | 披风/旗帜档，单帧预算内 |
 | 64 × 64 | 4 096 | 23 938 | **20.2 ms/步** | 20.5 ms/步 | 压力档，约两帧一步（60 fps 下需要降频或插值） |
 
-基准用例本身就是回归门槛：`Benchmark_32x32_ManagedSolverFitsInsideOneFrame`（< 8 ms）与
-`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames`（< 33 ms）。
-`v1.5.0` 的 Jobs + Burst 可选程序集就是冲着把 64×64 压进一帧去的（v1.3.0 先做了碰撞，本版没有动性能）。
+基准用例本身就是回归门槛：`Benchmark_32x32_ManagedSolverFitsInsideOneFrame`（< 20 ms）与
+`Benchmark_64x64_ManagedSolverStaysWithinTwoFrames`（< 66 ms）。这两条现在**只是量级守卫**：同一段代码在机器有
+后台负载时能跑出 7.73 / 32.36 ms，原来的 8 ms 与 33 ms 门槛被穿过过 —— 它们测的是这台机器有多闲，不是求解器有没有退化。
+真正的复杂度回归由 `Benchmark_ClothCostScalesNearLinearlyWithParticleCount` 用**比值**拦住：32×32（1024 质点）对
+64×64（4096 质点），质点与约束都是 4 倍，线性就该是 ~4 倍耗时，真退化成 O(n²) 会接近 16 倍（门槛 12）。负载对两档的影响
+近似相乘，比值把它约掉。
+`v1.6.0` 的 Jobs + Burst 可选程序集就是冲着把 64×64 压进一帧去的（v1.3.0 做了碰撞、v1.4.0 做了模型审计、v1.5.0 做了流体，性能一直排到最后）。
 
 ## 6. 编辑器工具
 

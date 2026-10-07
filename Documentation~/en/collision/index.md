@@ -50,6 +50,18 @@ All four rules are pinned by tests, so changing the semantics goes red first:
    v1.3.0 promotes it to an interface contract.
 4. **A negative `skin` is treated as 0.** An invalid value must never shove the point deeper inside.
 
+::: warning `BoxContainerProxy` breaks rule 1 on purpose
+The `PushOut` contract says "outside → returned unchanged", and a container needs exactly the opposite, so
+its semantics are inverted: points inside are bit-identical, points outside are pinned **per axis** back to the
+nearest inner wall. Why not build a sealed box out of six solid plates (which would obey the contract happily)?
+Because "push out along the shallowest penetrated face" is fatal for a tank: each plate adjudicates its own
+shallowest axis, so seams and slab mid-planes become one-way trapdoors and corner conveyors — measured in three
+stages (a 65 m fall, water through the floor underside, 120 particles out past the floor edge in 300 steps), 
+see §7 of the fluid page. Pinning per axis is minimum-displacement projection onto a **convex set**, so there is
+no "which face do I escape through" question at all. The price: the inner surface is a hard boundary, so you
+cannot model a leak with a container. Don't use one when you want water to escape.
+:::
+
 ## Which shapes
 
 | Proxy | Shape | Exit direction when inside | Notes |
@@ -57,6 +69,7 @@ All four rules are pinned by tests, so changing the semantics goes red first:
 | `SphereCollisionProxy` | sphere | radial | arithmetic **character-for-character** identical to v1.1.0's cloth obstacle, with a bit-identical comparison test |
 | `BoxCollisionProxy` | oriented box (OBB) | along the **shallowest** penetrating face; outside → along the closest-surface normal | any rotation supported; a thin slab exits through the nearest face instead of being flung sideways |
 | `CapsuleCollisionProxy` | segment + radius | radial on the cylinder, spherical on the caps | a degenerate zero-length axis falls back to a sphere instead of breaking |
+| `BoxContainerProxy` | **inside-out** OBB (a container: points outside get pinned in) | per axis, back to the nearest inner wall (minimum-displacement projection onto a convex set; leaving at a corner returns to the inner corner) | added in v1.5.0 for the fluid tank; `halfExtents` must all be positive; **deliberately breaks rule 1** — see the warning below |
 | `PlaneCollisionProxy` | **half-space** | always back to the normal side | see below — this is what makes landing work |
 
 ::: warning The plane is a half-space, not an infinitely thin wall
@@ -163,7 +176,7 @@ body free-falls, squashes 1.9% on impact and the volume constraint pops it back.
 | `updateCollidersEveryStep` | all three behaviours | `false` | turn on when colliders move or get enabled — rebuilds the proxy list each step (allocates) |
 
 Cost is `O(particles × proxies)` per substep, pure arithmetic, allocation-free while
-`updateCollidersEveryStep` stays off. v1.3.0 does **no** performance work (nor does v1.4.0, which shipped the model audit): the parallel solver is now scheduled for v1.5.0.
+`updateCollidersEveryStep` stays off. v1.3.0 does **no** performance work (nor does v1.4.0, which shipped the model audit): the parallel solver is now scheduled for v1.6.0.
 
 ## Still not in this release
 

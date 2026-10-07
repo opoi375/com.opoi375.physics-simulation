@@ -170,6 +170,81 @@ namespace PhysicsSimulation
         }
     }
 
+    /// <summary>
+    /// 内侧盒子（容器）：质点必须待在盒子**里面**。与 <see cref="BoxCollisionProxy"/> 相反 ——
+    /// 那个是实心障碍物（把点推到体外），这个是桶（把点拉回体内）。
+    ///
+    /// 为什么要单独一个代理：用实体薄板拼桶会撞上“最近面投影”这个模型本身的坑。板越厚，
+    /// 它的“坏半区”（越过中线后最近面变成另一面）就越大：实测六面封桶 + 壁厚 0.5 m，
+    /// 150 个粒子被地板边缘横向挤进墙板，最后停在墙外表面内侧 1.4 cm 处（穿透 0.486 m，
+    /// 与 dt 无关，100 步和 400 步、三种 dt 数字一模一样），看上去就是“水泡在墙里”。
+    /// 加背板只能把漏水变成互推，因为病根是单轴投影。容器代理直接对“可行域”做投影：
+    /// 把越界轴**一次性钉回**内壁（内缩 skin），凸集合上的投影就是位移最小的那个点，
+    /// 没有中线、没有方向歧义、也不存在“从另一面出去”。
+    ///
+    /// 契约与 <see cref="ICollisionProxy"/> 一致：已在体内→逐位不动；skin 在这里的含义是
+    /// “离内壁至少 skin 远”；skin 比腔体还厚时贴到中心面（退化但不 NaN，不振荡，确定）。
+    /// </summary>
+    public sealed class BoxContainerProxy : ICollisionProxy
+    {
+        public Vector3 Center { get; private set; }
+        public Vector3 HalfExtents { get; private set; }
+        public Quaternion Rotation { get; private set; }
+
+        public BoxContainerProxy(Vector3 center, Vector3 halfExtents, Quaternion rotation)
+        {
+            CollisionMath.RequireFinite(center, "center");
+            CollisionMath.RequireFinite(halfExtents, "halfExtents");
+            if (!(halfExtents.x > 0f) || !(halfExtents.y > 0f) || !(halfExtents.z > 0f))
+            {
+                throw new ArgumentOutOfRangeException("halfExtents",
+                    "容器半尺寸三个分量都必须是正有限值（米），当前 " + halfExtents);
+            }
+            if (float.IsNaN(rotation.x) || float.IsNaN(rotation.y) || float.IsNaN(rotation.z) || float.IsNaN(rotation.w)
+                || float.IsInfinity(rotation.x) || float.IsInfinity(rotation.y)
+                || float.IsInfinity(rotation.z) || float.IsInfinity(rotation.w))
+            {
+                throw new ArgumentOutOfRangeException("rotation", "旋转不允许 NaN / Infinity");
+            }
+            Center = center;
+            HalfExtents = halfExtents;
+            Rotation = rotation;
+        }
+
+        /// <summary>内缩后的可用半尺寸（按轴）：skin 比该轴腔厚一半还多时贴到中心面。</summary>
+        Vector3 InnerLimit(float skin)
+        {
+            float inset = CollisionMath.SafeSkin(skin);
+            return new Vector3(
+                Mathf.Max(0f, HalfExtents.x - inset),
+                Mathf.Max(0f, HalfExtents.y - inset),
+                Mathf.Max(0f, HalfExtents.z - inset));
+        }
+
+        public Vector3 PushOut(Vector3 point, float skin)
+        {
+            Vector3 limit = InnerLimit(skin);
+            Quaternion inverse = Quaternion.Inverse(Rotation);
+            Vector3 local = inverse * (point - Center);
+
+            // 逐轴钉回内壁：三个轴独立处理，所以角上越界的点会被直接推回体内最近的那个
+            // 内角（凸集合上的最小位移投影），而不是像实体板那样沿单轴“逃”到外面
+            bool moved = false;
+            if (Mathf.Abs(local.x) > limit.x) { local.x = (local.x >= 0f ? 1f : -1f) * limit.x; moved = true; }
+            if (Mathf.Abs(local.y) > limit.y) { local.y = (local.y >= 0f ? 1f : -1f) * limit.y; moved = true; }
+            if (Mathf.Abs(local.z) > limit.z) { local.z = (local.z >= 0f ? 1f : -1f) * limit.z; moved = true; }
+            return moved ? Center + Rotation * local : point;
+        }
+
+        /// <summary>点是否在可用腔体内（不含 skin 内缩）。给测试与诊断用。</summary>
+        public bool Contains(Vector3 point, float skin)
+        {
+            Vector3 limit = InnerLimit(skin);
+            Vector3 local = Quaternion.Inverse(Rotation) * (point - Center);
+            return Mathf.Abs(local.x) <= limit.x && Mathf.Abs(local.y) <= limit.y && Mathf.Abs(local.z) <= limit.z;
+        }
+    }
+
     /// <summary>胶囊：线段 + 半径。柱身沿径向脱出，端帽按球处理；轴段退化时整体退化成球。</summary>
     public sealed class CapsuleCollisionProxy : ICollisionProxy
     {

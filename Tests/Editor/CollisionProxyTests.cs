@@ -359,5 +359,122 @@ namespace PhysicsSimulation.Editor.Tests
             Assert.Throws<ArgumentNullException>(() => set.Add(null, CollisionProxySpace.World),
                 "空代理必须拒绝");
         }
+
+        // ==================================================================
+        // 内侧盒子（容器）：v1.5.0 演示水箱的真正兜水者
+        // ==================================================================
+
+        [Test]
+        public void Container_InsidePoint_IsBitIdentical()
+        {
+            // Given：内空 2×2×2，点在里头
+            var box = new BoxContainerProxy(Vector3.zero, Vector3.one, Quaternion.identity);
+            var inside = new Vector3(0.4f, -0.9f, 0.123f);
+
+            // When / Then：逐位不动（"已在体内 → 原样返回"是 ICollisionProxy 的契约）
+            Assert.That(box.PushOut(inside, Skin), Is.EqualTo(inside), "体内的点绝不该被拉近内壁");
+        }
+
+        [Test]
+        public void Container_PushesEveryFaceBackInside()
+        {
+            // Given：单位内空
+            var box = new BoxContainerProxy(Vector3.zero, Vector3.one, Quaternion.identity);
+
+            // When / Then：六个方向越界各被钉回 1 − skin，且只动穿透的那根轴
+            Vector3[] outside =
+            {
+                new Vector3(1.5f, 0f, 0f), new Vector3(-1.5f, 0f, 0f),
+                new Vector3(0f, 1.5f, 0f), new Vector3(0f, -1.5f, 0f),
+                new Vector3(0f, 0f, 1.5f), new Vector3(0f, 0f, -1.5f),
+            };
+            for (int i = 0; i < outside.Length; i++)
+            {
+                Vector3 result = box.PushOut(outside[i], Skin);
+                Assert.That(box.Contains(result, Skin), Is.True, "第 " + i + " 个方向推出后应回到体内，实际 " + result);
+                int axis = outside[i].sqrMagnitude > 0f ? MaxAbsAxis(outside[i]) : -1;
+                for (int a = 0; a < 3; a++)
+                {
+                    float expected = a == axis ? Mathf.Sign(outside[i][a]) * (1f - Skin) : outside[i][a];
+                    Assert.That(result[a], Is.EqualTo(expected).Within(1e-5f),
+                        "第 " + i + " 个方向第 " + a + " 轴不该被无关的面带偏，实际 " + result);
+                }
+            }
+        }
+
+        [Test]
+        public void Container_OutsideCorner_IsClampedToTheNearestInnerCorner()
+        {
+            // Given：点同时越出 +X 与 +Z（实体盒子的"最近面单轴投影"就是在这里开始把水沿墙搬走的）
+            var box = new BoxContainerProxy(Vector3.zero, Vector3.one, Quaternion.identity);
+
+            // When
+            Vector3 result = box.PushOut(new Vector3(2f, 0f, 3f), Skin);
+
+            // Then：两个轴各自钉回内壁 ⇒ 落在内角上，位移是"回到凸可行域"的最小投影。
+            //        这条就是演示水箱不再漏水的根：不存在中线，也就不存在"从另一面出去"
+            Assert.That(result.x, Is.EqualTo(1f - Skin).Within(1e-5f), "越出 +X 必须被钉回 +X 内壁");
+            Assert.That(result.z, Is.EqualTo(1f - Skin).Within(1e-5f), "越出 +Z 必须被钉回 +Z 内壁（不是沿单轴逃到外面）");
+            Assert.That(result.y, Is.EqualTo(0f).Within(1e-5f), "没越界的轴不该动");
+            Assert.That((result - new Vector3(2f, 0f, 3f)).magnitude, Is.LessThan(2.3f),
+                "位移应当小于把点沿单轴绕出去的距离：最小投影才是物理上说得通的");
+        }
+
+        [Test]
+        public void Container_SkinLargerThanCavity_DegradesToCentrePlaneWithoutNaN()
+        {
+            // Given：皮肤比腔体还厚（非法输入不允许把点往盒子里头塞，也不允许 NaN）
+            var box = new BoxContainerProxy(Vector3.zero, Vector3.one, Quaternion.identity);
+
+            // When
+            Vector3 result = box.PushOut(new Vector3(1.5f, 0f, 0f), 2f);
+
+            // Then：贴到中心面（可用半尺寸夹到 0），有限、确定、不报错
+            Assert.That(result.x, Is.EqualTo(0f).Within(1e-5f), "皮肤吃掉整个腔体时应当贴中心面");
+            Assert.That(float.IsNaN(result.x) || float.IsNaN(result.y) || float.IsNaN(result.z), Is.False,
+                "非法皮肤不允许产出 NaN：" + result);
+            Assert.That(box.PushOut(new Vector3(1.5f, 0f, 0f), -1f), Is.EqualTo(new Vector3(1f, 0f, 0f)).Within(1e-5f),
+                "负皮肤按 0 处理，不能把点往盒子里塞");
+        }
+
+        [Test]
+        public void Container_RespectsRotation()
+        {
+            // Given：绕 Y 转 45° 的内空，点越出旋转后的 +X 内壁
+            var rotation = Quaternion.Euler(0f, 45f, 0f);
+            var box = new BoxContainerProxy(new Vector3(1f, 0f, -1f), Vector3.one, rotation);
+            Vector3 far = new Vector3(1f, 0f, -1f) + rotation * new Vector3(4f, 0f, 0f);
+
+            // When
+            Vector3 result = box.PushOut(far, Skin);
+
+            // Then：回到自己的坐标系里算，落点应在旋转后的内壁上，且离容器中心正好一个半宽
+            Assert.That(result.y, Is.EqualTo(0f).Within(1e-5f), "没越界的轴不该动");
+            Assert.That((result - new Vector3(1f, 0f, -1f)).magnitude,
+                Is.EqualTo((rotation * new Vector3(1f - Skin, 0f, 0f)).magnitude).Within(1e-4f),
+                "旋转容器里越出 +X 的点应当被钉回旋转后的 +X 内壁，实际 " + result);
+        }
+
+        [Test]
+        public void Container_RejectsBadConstruction()
+        {
+            // Then：半尺寸非正 / 旋转带 NaN 都要当场拒绝（退化容器会把水钉到一条线上，静默毁掉演示）
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new BoxContainerProxy(Vector3.zero, new Vector3(1f, 0f, 1f), Quaternion.identity), "半尺寸不允许为 0");
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new BoxContainerProxy(Vector3.zero, new Vector3(1f, -1f, 1f), Quaternion.identity), "半尺寸不允许为负");
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new BoxContainerProxy(Vector3.zero, Vector3.one, new Quaternion(float.NaN, 0f, 0f, 1f)), "旋转不允许 NaN");
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new BoxContainerProxy(new Vector3(float.PositiveInfinity, 0f, 0f), Vector3.one, Quaternion.identity),
+                "中心不允许 Infinity");
+        }
+
+        /// <summary>绝对值最大的那个轴（0=x、1=y、2=z）。</summary>
+        static int MaxAbsAxis(Vector3 v)
+        {
+            float ax = Mathf.Abs(v.x), ay = Mathf.Abs(v.y), az = Mathf.Abs(v.z);
+            return ax >= ay && ax >= az ? 0 : (ay >= az ? 1 : 2);
+        }
     }
 }

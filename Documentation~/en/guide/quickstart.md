@@ -74,9 +74,9 @@ In `AddSpring`, `restLength <= 0` means "use the current distance between the tw
 Feeding a variable frame interval into the physics gives you the classic "it swings faster on a fast machine" bug. `Step()` also clamps dt (`maxDeltaTime`, default 1/15 s), but **the clamp is a safety net, not a licence**: always advance from `FixedUpdate`.
 :::
 
-## The other two modules, one line each
+## The other two modules: cloth and soft body
 
-Everything above is mass-spring. The shortest usable path for the other two:
+Everything above is mass-spring. The shortest usable path for the other two (fluids get their own section next):
 
 ```csharp
 using PhysicsSimulation;
@@ -98,6 +98,35 @@ soft.Rebuild();
 
 Both advance themselves in `FixedUpdate` (when `autoSimulate` is on) and both accept a manual `Step(dt)`.
 No code needed either: **Tools → Physics Simulation → Cloth / Soft Body → Create … Demo Scene**.
+
+## Making it flow: a starting snippet (v1.5.0)
+
+```csharp
+var fluid = gameObject.AddComponent<FluidBehaviour>();
+fluid.volumeShape = FluidVolumeShape.DamBreak;               // a block on one side, it collapses when released
+fluid.volumeSize = new Vector3(0.6f, 0.8f, 0.4f);            // 0.6 wide / 0.8 tall / 0.4 deep
+fluid.collideWithSceneColliders = true;                       // scene Colliders become proxies automatically
+fluid.renderMode = FluidRenderMode.Surface;                    // one continuous surface instead of a spray of dots (default: Particles)
+// autoSimulate is on by default: it steps in Update, no FixedUpdate needed
+```
+
+Pure code, no component, no GameObject:
+
+```csharp
+var p = new FluidParameters();                                // spacing 0.05, h = 2d, 2 substeps, 2 iterations
+var sim = new FluidSimulation(p, FluidVolume.DamBreak(0.6f, 0.8f, 0.4f, p.particleSpacing));
+sim.Collisions.Add(new BoxCollisionProxy(
+    new Vector3(0f, -0.1f, 0f), new Vector3(1f, 0.1f, 1f), Quaternion.identity));  // a 2 m slab as floor
+sim.Step(1f / 60f);
+```
+
+Three traps worth knowing before you start — each one was paid for:
+
+- **`collideWithSceneColliders` defaults to `false`** (determinism first). Leave it off and the water falls straight through the floor; on screen it looks like the fluid vanishes.
+- **Never spawn particles flush against a wall.** The box proxy ejects embedded particles along the *shallowest* penetration axis; when two faces are equally deep the winner is whatever sorts first, and a particle is sideways out the door on frame one. The demo tank keeps 0.08 m of clearance per side for exactly this reason.
+- **`maxDeltaTime` defaults to 1/30.** The first Play-mode frame can hand `Time.deltaTime` several seconds; uncapped, that single frame throws the whole tank into orbit (measured: 1,651 m). `0` disables the cap — only when you wrap it in a hard limit yourself.
+
+To see whether anything is actually moving, run **Tools → Physics Simulation → Fluid → Dump State (132)**: density ratio, average neighbours, max speed, bounds and `Truncated` in one shot. **A density ratio under 0.7 or fewer than 8 average neighbours means leaking or blowing up** — fix the geometry before touching parameters.
 
 ## Next
 

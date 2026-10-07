@@ -1,8 +1,8 @@
 {
   "name": "com.opoi375.physics-simulation",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "displayName": "Physics Simulation",
-  "description": "A deterministic physics simulation toolkit for Unity: mass-spring systems solved with semi-implicit Euler and substepping, PBD cloth with wind and obstacles, soft bodies that turn any mesh into a volume-preserving jelly, collision proxies with Collider bridging, and a real-solver model audit that grades arbitrary meshes (welding, closure, volume retention, cost per step). No runtime dependencies beyond the test framework.",
+  "description": "A deterministic physics simulation toolkit for Unity: mass-spring systems solved with semi-implicit Euler and substepping, PBD cloth with wind and obstacles, soft bodies that turn any mesh into a volume-preserving jelly, collision proxies with Collider bridging, a real-solver model audit that grades arbitrary meshes, and PBF position-based fluids (dam breaks, pooling, instanced particle rendering) with uniform-hash neighbour search. No runtime dependencies beyond the test framework.",
   "unity": "6000.5",
   "unityRelease": "6f1",
   "license": "MIT",
@@ -34,6 +34,13 @@
     "mesh-audit",
     "soft-body-audit",
     "model-audit",
+    "fluid",
+    "pbf",
+    "position-based-fluids",
+    "sph",
+    "dam-break",
+    "particle-fluid",
+    "neighbour-search",
     "diagnostics"
   ]
 }

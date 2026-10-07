@@ -1,6 +1,55 @@
 # 更新日志
 
-## [1.4.0] - 2026-10-05
+## [1.5.0] - 2026-10-06
+
+### Added
+- **流体水面渲染（等值面）** `Runtime/Fluid/FluidSurface.cs`：把粒子 splat 成规则格点上的标量场 `α`（用**同一个核**、按生成间距点阵的自和归一化，所以静止水体内部 ≈ 1），再用 **marching tetrahedra**（每个立方体按 Kuhn 剖成 6 个四面体）取 `α = 0.5` 的等值面。没有用 256 case 的 marching cubes 表：那张表要手抄四千多个整数，抄错表现为"偶尔破面"，最难被测试发现；Kuhn 剖分对平移不变 ⇒ 相邻格子共用面对角线 ⇒ **等值面天生闭合**，用例直接数边界边（`CountBoundaryEdges` 必须为 0）。法线取场梯度的中心差分，不用 `Mesh.RecalculateNormals`
+- **`FluidRenderMode`（`Particles` / `Surface` / `Both`，默认 `Particles`）** 与 `FluidBehaviour` 上的水面字段（`surfaceCellSize` / `surfaceIsoLevel` / `surfaceRefreshEveryNFrames` / `surfaceMaxCells` / `surfaceColor`）+ 只读观察口（`SurfaceMesh` / `SurfaceRevision` / `SurfaceTriangleCount` / `ParticleBatchCount`）；`FluidSurfaceMaterial` 是管线无关的半透明水面材质
+- **`FluidParameters.maxSpeed`**（默认 0 = 不限制，演示 8 m/s）：CFL 式的平流速度上限，补上"位移护栏只管约束修正、平流位移没有上限"这个洞
+- **内侧盒子容器代理 `BoxContainerProxy`**（`Runtime/Collision/CollisionProxies.cs`）：语义与实体代理**相反** —— 体内的点逐位不变，体外的点**逐轴**钉回最近内壁（往凸集合做最小位移投影），所以角上越界是回到内角而不是沿单轴逃出去。它是 `ICollisionProxy` 里唯一**故意不遵守"体外原样返回"这条契约**的实现，碰撞页有专门的 warning 讲为什么
+- **`FluidBehaviour` 上的一等容器字段** `enableBoxContainer` / `containerCenter` / `containerHalfSize`：容器**必须**跟着组件走 —— 手动 `Collisions.Add` 的代理在 `Rebuild()`（进 Play 模式就会触发）之后会被丢掉，实测那箱水直落到 `y = −92`、动能 16904
+- **演示水箱退回纯视觉 + 挡镜头的墙不画**：六块板不再挂任何 Collider，`CreateTank` 不给顶盖与朝向相机的两面墙建 Renderer，并由 `SegmentIntersectsPlate` 硬断言"相机到水面四个角点的连线不许穿过还画着的板"
+- **`FluidSurfaceTests` 19 条 + `FluidTankSealTests` 2 条**，布料规模比值基准 1 条；收尾时再加 `BoxContainerProxy` 单元 6 条、流体容器 Unity 层 2 条（重建后仍在 / 跨步兜水）与相机取景几何断言；全量 **270 通过**（静态按文件逐条数过并与 Runner 对账，工具页那张表的旧数字 33 碰撞 / 7 软体演示与文件实际不符，已改为 38 / 8）
+- **流体求解器（PBF）** `Runtime/Fluid/`：`FluidKernel`（poly6 / spiky 梯度 / 粘性拉普拉斯，归一化系数由**解析积分**测试钉住）、`FluidNeighborSearch`（均匀网格哈希 + CSR 邻居表，重建逐位确定）、`FluidVolume`（盒 / 球 / 柱 / 溃坝四种采样 + 预算截断上报）、`FluidSimulation`（密度约束投影 + 双密度修正 + 拉力钳制 + XSPH 黏度 + 涡度约束 + 子步与 dt 钳制，碰撞直接复用 v1.3.0 的 `CollisionSet`）
+- **`FluidBehaviour`**：世界↔局部换算（质点存**世界空间**，投影后没有速度回算，用局部空间会每帧叠一个 g）、Collider 自动桥接、**`Graphics.DrawMeshInstanced` 渲染**（不生成十万面网格，共享一个 `Mesh` 与一个 `Material`）
+- **编辑器工具 Fluid（130~132）**：`Create Fluid Demo Scene` / `Build Fluid In Current Scene` / `Dump State`，演示场景是**密封水箱 + 左侧水柱的溃坝**
+- **`DemoSceneSave`**：所有演示工具的存盘口子，未命名场景直接中止报错，绝不弹框；并有一条**全仓源码扫描**测试守着
+- **文档四页（中英）**：流体模块页（PBF 流水线、核函数归一化、三条保险丝、渲染与材质、水箱接缝教训、实测成本表）与流体参数参考页
+- 本版本的补丁把上面几页都改了：保险丝三条→**四条**（`maxSpeed`）、渲染一节改成**粒子与水面两小节**、§7 的三条漏水 warning 合并成"同一个根因：把实体板当碰撞体"并新增"挡镜头的墙不画""生成位置要按实测粒子算"两条、§9 补水面的边界与容器的边界；碰撞页代理表加 `BoxContainerProxy` 一行 + 一条"故意违反契约规矩 1"的 warning；参数参考加 `maxSpeed`、**水面参数**与**内侧盒子容器**小节；工具页测试表加 `FluidSurfaceTests` / `FluidTankSealTests` 两行并把合计改成 270（中英同步）
+- **68 个新 EditMode 测试**（9 核函数 + 8 邻居搜索 + 6 体积形状 + 24 求解器 + 10 Unity 层 + 9 演示工具 + 2 存盘口子），另给布料补 1 条 `maxDeltaTime`；含水面、密封、容器与取景在内，全量 **270 通过**
+
+### Fixed
+
+- **`FluidSurface.PlanGrid` 的格子数用 `int` 存，1e12 会溢出成负数**：于是"超预算"被判成"没超"，一个百万格的网格被静悄悄分配。现在 `CellCount` / `NodeCount` 是 `long`，节点数超过上限明确抛异常
+- **`FluidBehaviour` 在 EditMode 里调 `Object.Destroy` 回收水面网格**：Unity 打一条 `Destroy may not be called from edit mode!` 的 Error，而测试框架把任何未预期 Error 算成测试失败 —— 两个水面用例就这样莫名变红。现在走 `DisposeAsset`：运行时 `Destroy`、编辑器 `DestroyImmediate`
+- **核函数归一化写错**：poly6 用了 h⁷（应为 h⁹），spiky 梯度与粘性拉普拉斯用了 45/(πh⁷)（应为 45/(πh⁶)）。后果是静止水块密度比 7.1（该是 1.0），方块一帧摊成煎饼 —— 现在三条积分都有解析测试
+- **邻居表重建没清 `_stamp`**：上一轮的邻居被当成本轮邻居读，黏度算子拿到陈旧邻居集
+- **PBF 投影的尺度与弛豫形式错**：位移少乘 m、λ 分母少 Σ、投影后没有按 `v = (x − x_prev)/dt` 重算 —— 单轮位移是正确值的约 42 万倍，一帧甩飞
+- **`FluidParameters.Validate()` 的分支顺序**导致非正常输入被静默丢弃
+- **流体没有 `maxDeltaTime`**（布料从一开始就有）：编辑器进 Play 的第一帧秒级 dt 把整箱水甩到 1651 米外，画面上就是"爆炸"。现在四个求解器语义一致
+- **演示水箱接缝是一条单向活门**：墙底与底板之间的缝让盒子代理把水沿墙底往外拱，外侧没有地板，水直接自由落体砸穿相机（`v ≈ √(2gh)` 是漏不是炸）。修成墙底扎进底板 + 四面墙平面重叠，并加测试钉住
+- **水柱贴壁**：与三面墙和地板同时相切 → 最浅轴并列 → 第一帧抛向随机一侧。现在单侧留 0.08 m
+- **六面封死的水箱仍然漏（角部传送带）**：把六块板各挂一个 `BoxCollisionProxy` 之后，300 步实测仍有 120 粒从地板 `-z` 边被横向挤出去、越过地板与墙的外表面后自由落体（样例 `(-0.635, -0.529, -0.964)`，速度 3.3 → 4.1 m/s 递增）。先加过一轮"背板"（6 块只碰不画的兜底板，12 个代理，跑出外沿 0 粒），但兜住不等于对：实测仍有 **150 粒被按进墙板**、最深 **0.486 m**（停在墙外表面内侧 1.4 cm，与 dt 无关：100/400 步、1/60、0.02、1/30 数字一样），画面上就是水贴着墙皮。根因是"每个代理各自沿最浅面投影"，不是步长。**最终解法**：板子全部退回纯视觉，水的边界交给一个 `BoxContainerProxy`（逐轴钉回内壁 = 往凸集合做最小位移投影）；实测 300 步 0 粒出界、包围盒回到内空以内，背板那 6 个代理随之删除（12 → **1**）
+- **水柱生成在墙里**：`FluidVolume.DamBreak` 的水体在深度方向是**居中**的，而演示按"三个轴都贴最小角"把水柱摆到 `DemoColumnOffset.z = −0.37`，于是 1540 粒里 **560 粒生在 −z 墙体内**（一帧密度冲到 1392）。现在 offset 改成 0，摆放断言改成量**真实生成出来的粒子包围盒**，不再信形状参数的语义
+- **手工挂的容器代理在 Play 里消失**：代理存在 `CollisionSet` 里，而 `OnEnable → Rebuild()` 会重建它，于是编辑器里看着好好的，一进 Play 就"碰撞代理 0"、一箱水直落到 `y = −92`（动能 16904）。容器改成 `FluidBehaviour` 的序列化字段，在 `Rebuild()` 内部重新挂上，并有 `BoxContainer_SurvivesEveryRebuild` 钉住
+- **相机到水面的连线被墙顶挡住**：水在箱里但截图里是一个空盒子。改成"挡镜头的墙不画"，并把取景判据写成硬几何断言（相机到水面四个角点不许穿过任何还画着的板）
+- **相机齐眼高度 + 水池太浅**：截图里那片"空盒子"就是前墙挡住了相机；水摊成一层，从侧面看等于没有。现在俯视取景且池深 ≥ 4 行质点，两个常量都被测试钉住
+- **`EditorSceneManager.SaveOpenScenes()` 在未命名场景下会弹系统对话框**，从菜单 API 调进来直接把主线程堵死（表现为菜单 300 秒超时）。全部改走 `DemoSceneSave`
+
+### Changed
+
+- **演示水箱从"六块实体板"改成"六块纯视觉板 + 1 个内侧盒子容器"**：碰撞代理数 12 → **1**，挡镜头的两面侧墙与顶盖不渲染，水完全留在内空以内（300 步实测）
+- **演示场景 `Assets/Scenes/FluidDemo.unity` 现在是水面模式 + 六面封闭水箱**（1540 粒 / 预算 1500 / `spacing 0.07`）。原来的开顶设计本意是"看得见飞溅"，但 Play 里浪头把水直接抛过 1.1 m 的墙头，300 帧后包围盒 10.3 × 9.1 × 6.7 m，一箱水泼在箱外 —— 而主体是健康的（密度均值比 0.917、`v_rms` 2.6 m/s），是弹道不是发散。水箱只有 Collider 没有 Mesh，封顶不影响取景
+- **`FluidTankSealTests` 的跑长从 10 步抬到 300 步**：穿板漏水 10 步就看得见，弹道溅出要跑到后期才暴露，**窗口太短本身就是一种漏测**
+- **布料基准的门槛换了口径**：`32×32` 由 8 ms 改为 20 ms 硬上限、`64×64` 由 33 ms 改为 66 ms，另加 `Benchmark_ClothCostScalesNearLinearlyWithParticleCount`（比值门，实测线性应为 4.00，门槛 12）。这与软体、流体同一套理由：绝对毫秒测的是机器空闲度
+
+### Notes
+- **Burst 顺延到 v1.6.0**：本版做的是流体而不是并行化，流体目前跑托管求解器 —— 基准实测：固定 `d = 0.05 / h = 0.1` 时 1000 粒 13.3~21.2 ms/步、4096 粒 64.7~97.7 ms/步（同用例两次运行差 1.6 倍，所以门限用规模比值 4.59~4.88）；演示那档 1456 粒（平均邻居 25.1）落在两行之间，量级 20~60 ms/步，60 fps 一帧走不完 2 子步 × 2 迭代
+- **基准门槛的口径换了**：软体那条 `8 ms` 绝对门槛在同一段代码、机器有后台负载时被打穿过（实测 9.4 / 9.5 ms 直接红），它测的是机器空闲度而不是求解器退化。本版统一改掉：流体两条基准只断言**规模比值**（实测 4.59~5.75，门槛 12），软体保留 20 ms 硬上限并新增 `Benchmark_SoftBodyCostScalesNearLinearlyWithParticleCount`（162 质点对 642 质点，实测比值 5.99~6.33）。布料 64×64 的 33 ms 门槛带负载实测 32.36 ms，只剩 0.6 ms 余量 —— 这是已知脆点，改比值排在 v1.6.0
+- 渲染有**粒子**与**等值面水面**两档（marching tetrahedra，不是 marching cubes，也不做 UF 核加权模糊）；没有表面张力，黏性只有 XSPH 这一档
+- 容器只做**一个长方体**（可带旋转）：内表面是硬边界，做不出"水从洞里漏出去"；要漏水就别用容器。多个容器叠加会重新引入"每个代理各自裁决"的问题（本版 §7 的教训）
+- 自碰撞依然没有（布料、软体、流体都没有）；规模上限受托管 O(n·k) 成本约束，演示预算定在 1500 粒
+- `MaxCorrectionPerIterationFactor` 是**可写的静态护栏**（不是可调参数）：调它只能用来做诊断实验，正常配置不要动## [1.4.0] - 2026-10-05
 
 ### Added
 - **模型审计** `Runtime/SoftBody/SoftBodyMeshAudit.cs`：`SoftBodyMeshAudit.Audit(data, parameters, steps, addGround)` 用**真实** `SoftBodySimulation` 跑固定 1/60 步长、落地在世界空间 `PlaneCollisionProxy` 地面上，产出 `SoftBodyAuditResult`（焊接比、质点/弹簧/三角形数、闭合性、有向静止体积、体积保持率、最大拉伸、最低质点世界 y、每步耗时、判定）。**对脏输入永不抛异常** —— 构建失败记成 `BuildFailed` 并把原因留在 `BuildError`

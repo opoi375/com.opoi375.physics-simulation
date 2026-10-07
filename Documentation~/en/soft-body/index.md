@@ -130,15 +130,29 @@ Open meshes (some edge used by exactly one triangle) have no meaningful volume: 
 
 Unity 6000.5.6f1, managed single thread, EditMode benchmark, best/mean over 5 batches × 60 steps:
 
-| Size | Configuration | Best | Mean |
-| --- | --- | --- | --- |
-| Soft body, 642 particles | 1920 structural + 1920 bend springs, 1280 triangles, 4 substeps | **2.745 ms/step** | 2.814 ms/step |
-| Cloth 32×32 | 1024 particles, 5826 constraints, 4 substeps | 3.299 ms/step | 3.351 ms/step |
-| Cloth 64×64 | 4096 particles, 23938 constraints, 4 substeps | 19.447 ms/step | 20.477 ms/step |
+| Size | Configuration | Best | Mean | Same cases, loaded machine |
+| --- | --- | --- | --- | --- |
+| Soft body, 642 particles | 1920 structural + 1920 bend springs, 1280 triangles, 4 substeps | **2.745 ms/step** | 2.814 ms/step | 9.53 ms on a loaded run |
+| Cloth 32×32 | 1024 particles, 5826 constraints, 4 substeps | 3.299 ms/step | 3.351 ms/step | 7.73 ms on a loaded run |
+| Cloth 64×64 | 4096 particles, 23938 constraints, 4 substeps | 19.447 ms/step | 20.477 ms/step | **32.36 ms** loaded (gate is 33 — 0.6 ms of margin) |
 
 A two-level subdivided icosphere (642 particles) costs 2.7 ms per step — enough to share a frame with a
 32×32 cloth. The benchmark is itself a test,
-`Benchmark_IcoSphere642_ManagedSolverFitsInsideOneFrame`, gated at 8 ms so a regression goes red.
+`Benchmark_IcoSphere642_ManagedSolverFitsInsideOneFrame`, gated at a 20 ms hard ceiling so a regression goes red.
+
+::: warning The 8 ms absolute gate was pierced — v1.5.0 replaced it
+On an identical checkout (empty `git diff`) with background load, the case measured **9.4 / 9.5 ms/step** and went
+red: it was measuring how idle the machine was, not whether the solver regressed. Soft body now asserts two
+complementary things:
+- `Benchmark_IcoSphere642_ManagedSolverFitsInsideOneFrame` keeps only a **20 ms hard ceiling** (catches
+  order-of-magnitude regressions); ~2.7 ms idle and 9.5 ms under load both sit inside it;
+- the new `Benchmark_SoftBodyCostScalesNearLinearlyWithParticleCount` compares subdivision level 2
+  (162 particles / 480 springs) with level 3 (642 / 1920) and requires a **time ratio < 12** — measured
+  **5.99 ~ 6.33** (linear scaling would be 3.99, a quadratic blow-up about 15.7). Load multiplies into both
+  scales, the ratio cancels it, and what remains is complexity.
+Read the table below knowing **those numbers are idle-machine bests**: the same cases measured 9.5 / 7.7 /
+32.4 ms on a loaded run.
+:::
 
 ## 6.5 Landing on something: collision (v1.3.0)
 
@@ -198,4 +212,4 @@ See the [Editor Tools overview](/en/tools/).
 
 ## 9. What's next
 
-- v1.5.0 moves the solver into Jobs + Burst (optional assembly); this benchmark is the baseline to beat. v1.3.0 shipped collision and v1.4.0 the model audit; neither touched performance.
+- v1.6.0 moves the solver into Jobs + Burst (optional assembly); this benchmark is the baseline to beat. v1.3.0 shipped collision, v1.4.0 the model audit and v1.5.0 the fluids; none touched performance.

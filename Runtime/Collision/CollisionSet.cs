@@ -91,6 +91,19 @@ namespace PhysicsSimulation
         public static void ResolvePositions(CollisionSet set, Vector3[] positions, float skin,
                                             Matrix4x4 localToWorld, Matrix4x4 worldToLocal, bool worldIsIdentity)
         {
+            ResolvePositions(set, positions, skin, localToWorld, worldToLocal, worldIsIdentity, null);
+        }
+
+        /// <summary>
+        /// 同上，另外把**每个粒子被推出去的方向**累加进 <paramref name="contacts"/>（模拟空间，
+        /// 未归一化，调用方按需要归一）。给需要"接触法向"的求解器用：位置投影在物理上是
+        /// 约束而不是冲量，把它读进速度里会让流体自己把自己弹射出去（见流体 <c>RemoveBounce</c>）。
+        /// 传 null 就是原来的行为，逐位不变。
+        /// </summary>
+        public static void ResolvePositions(CollisionSet set, Vector3[] positions, float skin,
+                                            Matrix4x4 localToWorld, Matrix4x4 worldToLocal, bool worldIsIdentity,
+                                            Vector3[] contacts)
+        {
             List<CollisionEntry> entries = set.Entries;
             for (int e = 0; e < entries.Count; e++)
             {
@@ -101,7 +114,13 @@ namespace PhysicsSimulation
                     // 模拟空间（或变换本来就是单位矩阵）：直接对局部位置算，逐位等价于 v1.2.0 的旧路径
                     for (int i = 0; i < positions.Length; i++)
                     {
-                        positions[i] = entry.Proxy.PushOut(positions[i], skin);
+                        Vector3 before = positions[i];
+                        positions[i] = entry.Proxy.PushOut(before, skin);
+                        if (contacts != null)
+                        {
+                            Vector3 push = positions[i] - before;
+                            if (push.sqrMagnitude > 1e-12f) contacts[i] += push.normalized;
+                        }
                     }
                     continue;
                 }
@@ -111,7 +130,16 @@ namespace PhysicsSimulation
                 {
                     Vector3 world = localToWorld.MultiplyPoint(positions[i]);
                     Vector3 resolved = entry.Proxy.PushOut(world, worldSkin);
-                    if (resolved != world) positions[i] = worldToLocal.MultiplyPoint(resolved);
+                    if (resolved != world)
+                    {
+                        if (contacts != null)
+                        {
+                            // 法向用 worldToLocal 的旋转部分搬回模拟空间；变换带缩放时这是近似
+                            Vector3 push = worldToLocal.MultiplyVector(resolved - world);
+                            if (push.sqrMagnitude > 1e-12f) contacts[i] += push.normalized;
+                        }
+                        positions[i] = worldToLocal.MultiplyPoint(resolved);
+                    }
                 }
             }
         }

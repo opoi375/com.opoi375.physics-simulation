@@ -73,9 +73,9 @@ Plane 自带 **MeshCollider**，而本版只做 primitive 解析碰撞（球 / O
 把可变帧间隔的 `deltaTime` 直接喂给物理，会得到"帧率越高摆得越快"的经典 bug。本包在 `Step()` 里还额外做了 `maxDeltaTime` 钳制（默认 1/15 秒），但**钳制是兜底，不是让你随便喂**：请始终在 `FixedUpdate` 里推进。
 :::
 
-## 另外两个模块：一行起步
+## 另外两个模块：布料与软体
 
-上面是质点弹簧。另外两个模块各自最短的可用路径：
+上面是质点弹簧。另外两个模块各自最短的可用路径（流体见下一节）：
 
 ```csharp
 using PhysicsSimulation;
@@ -97,6 +97,35 @@ soft.Rebuild();
 
 两者都在 `FixedUpdate` 里自己推进（`autoSimulate` 为真时），也都能 `Step(dt)` 手动驱动。
 不想写代码就用菜单：**Tools → Physics Simulation → Cloth / Soft Body → Create … Demo Scene**。
+
+## 让它流起来：一段起步（v1.5.0）
+
+```csharp
+var fluid = gameObject.AddComponent<FluidBehaviour>();
+fluid.volumeShape = FluidVolumeShape.DamBreak;               // 一侧的水块，松手就塌开
+fluid.volumeSize = new Vector3(0.6f, 0.8f, 0.4f);            // 宽 0.6 / 高 0.8 / 深 0.4
+fluid.collideWithSceneColliders = true;                       // 场景里的 Collider 自动变成代理
+fluid.renderMode = FluidRenderMode.Surface;                    // 想连成一片水而不是满天小球（默认 Particles）
+// autoSimulate 默认 true：它在 Update 里自己走步，不需要 FixedUpdate
+```
+
+纯代码（不要组件、不要 GameObject）：
+
+```csharp
+var p = new FluidParameters();                                 // 默认间距 0.05、h = 2d、子步 2、迭代 2
+var sim = new FluidSimulation(p, FluidVolume.DamBreak(0.6f, 0.8f, 0.4f, p.particleSpacing));
+sim.Collisions.Add(new BoxCollisionProxy(
+    new Vector3(0f, -0.1f, 0f), new Vector3(1f, 0.1f, 1f), Quaternion.identity));  // 一块 2 米见方的地板
+sim.Step(1f / 60f);
+```
+
+起步时就该知道的三个坑，都是真摔过的：
+
+- **`collideWithSceneColliders` 默认 `false`**（确定性优先）。不打开的话水会直接穿地板流走，画面上看像"水凭空消失"。
+- **别把质点生成在壁面上**。盒子代理把嵌入的质点沿**最浅穿透轴**推回去；一个质点同时贴两个面时两侧一样深，方向由排序决定 —— 第一帧就有质点被横向弹飞。演示水箱与壁子专门留了 0.08 m 间隙，你自己的摆放也要留。
+- **`maxDeltaTime` 默认 1/30**。编辑器进 Play 的第一帧 `Time.deltaTime` 可以有好几秒，不钳制的话一帧就把整箱水甩出宇宙（实测 1651 米）。设 0 表示不钳制 —— 只有在外面套了硬上限时才这么写。
+
+想先看清"到底在不在动"就用 `Tools → Physics Simulation → Fluid → Dump State (132)`：它把密度比、平均邻居数、最大速度、包围盒和 `Truncated` 一次打全。**密度比 < 0.7 或平均邻居 < 8 基本就是在漏或者在炸**，别先调参数。
 
 ## 下一步
 
