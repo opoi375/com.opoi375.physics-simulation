@@ -187,7 +187,10 @@ PBF 的投影在**病态构型**下会给出荒谬的位移（邻居太少时密
   一个六面封死的水箱（地板 + 四面墙 + 顶盖，**只画不碰**）+ 一坨溃坝水（1540 粒，预算 1500）。
   兜住水的是 **1 个内侧盒子容器代理**（`BoxContainerProxy`，挂在 `FluidBehaviour` 的序列化字段上），不是六块板
   —— 演示场景里 `碰撞代理 1` 就是这个数
-  + **俯视相机** + **水面模式**（`FluidRenderMode.Surface`）。
+  + **3/4 俯视相机** + **水面模式**（`FluidRenderMode.Surface`）。
+  **朝向相机的两面墙和顶盖不生成 `Renderer`**（diorama 式处理）：水浅的时候，不裁掉挡镜头那面墙，
+  截图里就只是一只空盒子——实测发生过，而水其实确实在箱里（`Dump State` 报 `水面 三角 14044`）。
+  裁掉不影响物理，因为兜水的是容器代理而不是板子。
 - `Tools/Physics Simulation/Fluid/Build Fluid In Current Scene`（131）—— 只往当前场景加一坨水和一个水箱。
 - `Tools/Physics Simulation/Fluid/Dump State`（132）—— 打印每坨水的粒子数 / 平均与最大邻居度 / 密度均值最小最大 /
   包围盒 / 质心 / 动能 / 质量 / 碰撞代理数 / 子步·迭代·XSPH·涡度·拉力钳制。**画面不对时的第一现场工具。**

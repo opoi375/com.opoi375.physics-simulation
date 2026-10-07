@@ -208,6 +208,10 @@ surface is on or off; `Both` is two draw submissions, numerically identical to `
   (`FluidRenderMode.Surface`). What actually holds the water is **one inside-out box container proxy**
   (`BoxContainerProxy`, a serialized field on `FluidBehaviour`) rather than the six plates - the demo
   scene reports `碰撞代理 1` / "proxy count 1" and that is it.
+  The **two walls facing the camera and the lid get no `Renderer`** (diorama treatment): with a shallow pool,
+  an un-culled near wall means the screenshot shows an empty box - which happened for real, while the water
+  was in fact inside (`Dump State` reported `surface triangles 14044`). Culling is render-only and cannot
+  break containment, because the boundary is the container proxy, not the plates.
 - `Tools/Physics Simulation/Fluid/Build Fluid In Current Scene` (131) — adds a tank and a water column to the open scene.
 - `Tools/Physics Simulation/Fluid/Dump State` (132) — per blob: particle count, average/max neighbour degree,
   density mean/min/max, bounds, centroid, kinetic energy, mass, proxy count, substeps/iterations/XSPH/vorticity/clamp.
