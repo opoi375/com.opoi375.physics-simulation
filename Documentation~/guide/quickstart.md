@@ -127,8 +127,35 @@ sim.Step(1f / 60f);
 
 想先看清"到底在不在动"就用 `Tools → Physics Simulation → Fluid → Dump State (132)`：它把密度比、平均邻居数、最大速度、包围盒和 `Truncated` 一次打全。**密度比 < 0.7 或平均邻居 < 8 基本就是在漏或者在炸**，别先调参数。
 
+::: tip 运行期调参与复位
+`substeps` / `solverIterations` 在运行期会被钳到 ≥1（`EffectiveSubsteps` / `EffectiveSolverIterations`），不会因为 Inspector 上拖成 0 就把整帧静默冻结；
+`kernelRadius` 实时生效（邻居表每步重建），`particleSpacing` / `maxParticles` 必须 `Rebuild()`。
+`ResetToInitialLayout()` 与 `Rebuild()` 共用 `WireSimulation()`，容器代理与场景 Collider 桥都不会丢。
+:::
+
+## 让它们互相碰（v1.6.0）
+
+`ParticleInteractionGroup` 把软体 / 布料 / 质点弹簧放进同一个组，组内的体用**质点球云**互相推开：
+
+```csharp
+var group = gameObject.AddComponent<ParticleInteractionGroup>();
+group.Add(jellyA);     // SoftBodyBehaviour
+group.Add(scarf);      // ClothBehaviour —— 跨求解器不需要额外配置
+```
+
+两条反直觉的事实，先知道再调参：
+
+- **没有成员 = 行为逐位不变**。互碰是显式登记的，不存在"自动全场互碰"这种隐藏全局状态。
+- **接触判定距离 = 对方半径 + skin**，不是 `r_A + r_B`：两个表面要先互相吃进去大约半个质点间距，互碰才会参与。
+  系数调小不是"更精细"，是**漏接触**。实测（0.6 m 方块、细分 3、面间隙 0.08 m、360 步）：`cloudRadiusFactor` 0.25 完全没反应
+  （最近球心距一直冻在 0.080 m、速度精确为 0），0.5 才有 3.78 m 的总平移。想贴合请加密网格（细分 3 → 6 把间距 0.228 砍到 0.114）。
+
+等重的两个体堆不住（四档刚度配方终点都是并排躺在地上），轻压重可以 —— 演示里那条布就是被果冻托着的。
+详见[多体互碰](/interaction/)。
+
 ## 下一步
 
 - 公式、参数含义、稳定性推导：[质点弹簧](/mass-spring/) · [布料](/cloth/) · [软体](/soft-body/)
+- 体与体互碰：[多体互碰](/interaction/)
 - 字段速查：[质点弹簧参数](/reference/mass-spring-parameters) · [布料参数](/reference/cloth-parameters) · [软体参数](/reference/soft-body-parameters)
 - 出问题时怎么查：[编辑器工具](/tools/)

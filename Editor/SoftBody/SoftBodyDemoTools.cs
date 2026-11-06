@@ -18,6 +18,42 @@ namespace PhysicsSimulation.EditorTools
     {
         public const string ScenePath = "Assets/Scenes/SoftBodyDemo.unity";
 
+        /// <summary>
+        /// 演示场景里的两个软体要不要放进同一个互碰组。
+        /// 默认**关**：开了就是改变已发布演示的行为，必须由调用方明确表态。
+        /// 开关状态是可直接断言的（组件上的 interactionGroup 字段），不靠肉眼判断画面。
+        /// </summary>
+        public static bool DemoEnableInteraction = false;
+
+        /// <summary>互碰组物体名。<see cref="EnsureInteractionGroup"/> 按这个名字复用，不重复建。</summary>
+        public const string InteractionGroupName = "SoftBodyInteractionGroup";
+
+        /// <summary>
+        /// 拿到（或建出）演示用的互碰组。做成“按名字复用”而不是“每次都 new 一个”，
+        /// 是因为两个入口（建场景 / 往当前场景加）都会调它，一人一个组就等于没有互碰。
+        /// </summary>
+        static ParticleInteractionGroup EnsureInteractionGroup()
+        {
+            var existing = GameObject.Find(InteractionGroupName);
+            if (existing != null)
+            {
+                var found = existing.GetComponent<ParticleInteractionGroup>();
+                if (found != null) return found;
+                return existing.AddComponent<ParticleInteractionGroup>();
+            }
+            var go = new GameObject(InteractionGroupName);
+            return go.AddComponent<ParticleInteractionGroup>();
+        }
+
+        /// <summary>开关开着就把这个体接进演示互碰组，并记下它的组引用。</summary>
+        static void JoinDemoInteractionIfNeeded(SoftBodyBehaviour behaviour)
+        {
+            if (!DemoEnableInteraction || behaviour == null) return;
+            var group = EnsureInteractionGroup();
+            behaviour.interactionGroup = group;
+            group.Add(behaviour);
+        }
+
         const int BoxSubdivisions = 2;            // 每面切成 2×2 ⇒ 顶点更多、形变更细腻
         const float BoxSize = 0.9f;
         // 扰动必须走 SoftBodyBehaviour.initialVelocity（可序列化），不能只改运行时质点位置：
@@ -178,6 +214,7 @@ namespace PhysicsSimulation.EditorTools
             string path;
             DemoMaterialHelper.Apply(renderer, new Color(0.30f, 0.72f, 0.95f, 1f), null, out path);
             LastMaterialPath = path;
+            JoinDemoInteractionIfNeeded(behaviour);
             return behaviour;
         }
 
@@ -206,6 +243,7 @@ namespace PhysicsSimulation.EditorTools
             string path;
             DemoMaterialHelper.Apply(renderer, new Color(0.95f, 0.62f, 0.25f, 1f), null, out path);
             LastMaterialPath = path;
+            JoinDemoInteractionIfNeeded(behaviour);
             return behaviour;
         }
 

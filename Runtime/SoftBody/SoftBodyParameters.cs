@@ -12,70 +12,87 @@ namespace PhysicsSimulation
     /// 所有字段都在 <see cref="Validate"/> 里被检查；非法值在构造 <see cref="SoftBodySimulation"/> 时立刻抛，
     /// 不会悄悄跑出一个错的模拟。
     /// </summary>
+    [Serializable]
     public sealed class SoftBodyParameters
     {
         // ---------------------------------------------------------------- 物体
 
         /// <summary>单个质点质量（千克）。体积力与弹簧力都是真力，所以质量会实实在在影响加速度。</summary>
+        [RequiresRebuild("AddParticle 在 Build 时把质量写进质点")]
         public float mass = 1f;
 
         /// <summary>常重力加速度。</summary>
+        [RuntimeTunable]
         public Vector3 gravity = new Vector3(0f, -9.81f, 0f);
 
         /// <summary>全局速度阻尼，积分时除以 (1 + damping·dt)，只衰减不反号。</summary>
+        [RuntimeTunable]
         public float damping = 0.5f;
 
         /// <summary>
         /// 速度上限（米/秒），0 表示不限。显式弹簧在极端刚度下会先把速度打飞，
         /// 这个限幅是"绝不出现 Infinity"的最后一道保险，同时让拉伸限幅能真正把形状拉回来。
         /// </summary>
+        [RuntimeTunable]
         public float maxSpeed = 40f;
 
         // ---------------------------------------------------------------- 弹簧
 
         /// <summary>结构弹簧刚度 k（沿网格棱边）。</summary>
+        [RequiresRebuild("Spring.stiffness 是 readonly，Build 时烘进弹簧")]
         public float springStiffness = 1200f;
 
         /// <summary>结构弹簧轴向阻尼 c，抑制"弹一下一直抖"。</summary>
+        [RequiresRebuild("弹簧的轴向阻尼是 readonly，Build 时烘进弹簧")]
         public float springDamping = 6f;
 
         /// <summary>弯曲弹簧刚度 k（共边两侧的对面顶点之间）。为 0 时不生成弯曲弹簧。</summary>
+        [RequiresRebuild("为 0 时根本不生成弯曲弹簧，Build 时定拓扑")]
         public float bendStiffness = 150f;
 
         /// <summary>弯曲弹簧轴向阻尼 c。</summary>
+        [RequiresRebuild("弯曲弹簧的阻尼是 readonly，Build 时烘进弹簧")]
         public float bendDamping = 2f;
 
         // ---------------------------------------------------------------- 体积
 
         /// <summary>体积恢复刚度 k（力 / 体积误差）。0 表示关掉体积约束，退化成一张"会抖的壳"。</summary>
+        [RuntimeTunable]
         public float volumeStiffness = 4000f;
 
         /// <summary>体积阻尼 c（力 / 体积变化率），吃掉恢复过程中的振荡。</summary>
+        [RuntimeTunable]
         public float volumeDamping = 20f;
 
         // ---------------------------------------------------------------- 积分
 
         /// <summary>一次 Step 内切几个子步。显式积分的稳定性几乎全押在这里。</summary>
+        [RuntimeTunable]
         public int substeps = 4;
 
         /// <summary>单帧 dt 的上限，防止卡顿一帧把软体炸飞。</summary>
+        [RuntimeTunable]
         public float maxDeltaTime = 1f / 15f;
 
         // ---------------------------------------------------------------- 构建与保险
 
         /// <summary>顶点焊接容差（米）：距离小于它的网格顶点视为同一个质点。</summary>
+        [RequiresRebuild("顶点焊接只在 Build 时跑一次，拓扑已定")]
         public float weldTolerance = 1e-4f;
 
         /// <summary>是否启用结构弹簧的拉伸限幅（位置级投影，每子步多轮扫描）。</summary>
+        [RuntimeTunable]
         public bool enableStretchLimit = true;
 
         /// <summary>结构弹簧最大 长度/静止长度。必须 >= 1。</summary>
+        [RuntimeTunable]
         public float maxStretchRatio = 2f;
 
         /// <summary>
         /// 碰撞皮肤厚度（米），默认 0.01。只有 <see cref="SoftBodySimulation.Collisions"/> 里有代理时才会用到。
         /// 0 合法（质点贴表面），但容易因浮点误差在地面上反复“穿入/顶出”，所以默认留一层薄皮肤。
         /// </summary>
+        [RuntimeTunable]
         public float collisionThickness = 0.01f;
 
         /// <summary>把外部 dt 钳到 [0, maxDeltaTime]。</summary>

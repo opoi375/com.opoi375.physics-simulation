@@ -11,7 +11,7 @@ namespace PhysicsSimulation
     /// </summary>
     [DefaultExecutionOrder(-100)]
     [AddComponentMenu("Physics Simulation/Mass Spring Behaviour")]
-    public sealed class MassSpringBehaviour : MonoBehaviour
+    public sealed class MassSpringBehaviour : MonoBehaviour, IParticleBody
     {
         [Header("积分参数")]
         [Tooltip("常规模拟重力（米/秒²）。设成零可以用来单独验证弹簧内力。")]
@@ -42,6 +42,13 @@ namespace PhysicsSimulation
         [Tooltip("画出质点半径的基准（米）；实际半径按 log(质量) 缩放。")]
         [Min(0.01f)]
         public float particleRadiusBase = 0.06f;
+
+        [Tooltip("关掉则不自动推进，改成由脚本调 <c>Step()</c>。默认开：不该因为升级就改变现有场景。")]
+        public bool autoSimulate = true;
+
+        [Tooltip("加入这个互碰组后，同组的体（软体 / 布料 / 质点弹簧，类型不限）之间会互相挤开。\n"
+                 + "留空 = 完全不参与互碰，行为与之前版本逐位一致。")]
+        public ParticleInteractionGroup interactionGroup;
 
         private static readonly Color FreeParticleColor = new Color(0.35f, 0.9f, 1f, 1f);
         private static readonly Color PinnedParticleColor = new Color(1f, 0.82f, 0.2f, 1f);
@@ -86,9 +93,109 @@ namespace PhysicsSimulation
 
         private void FixedUpdate()
         {
+            if (!autoSimulate) return;
+            Step(Time.fixedDeltaTime);
+        }
+
+        /// <summary>
+        /// 手动推进一个时间步（不管 autoSimulate 是什么）。
+        /// 与另外两个 Behaviour 对齐：以前只有 FixedUpdate 一条路，而 EditMode 测试里 FixedUpdate
+        /// 根本不触发，质点弹簧以没有任何办法被测试驱动 —— 这是已发布 API 的一个真空缺。
+        /// </summary>
+        public void Step(float deltaTime)
+        {
             if (_system == null && !Rebuild()) return;
+            SyncRuntimeParameters();
             SyncSceneColliders();
-            _system.Step(Time.fixedDeltaTime);
+            _system.Step(deltaTime);
+            _cloudVersion++;                        // 质点动了：让别人的球云索引知道该重建
+        }
+
+        /// <summary>
+        /// 把四个**非拓扑**参数同步进内层系统，每步一次。
+        ///
+        /// 这四项（重力 / 全局阻尼 / 子步 / dt 上限）只影响"怎么积分"，跟质点与弹簧的拓扑无关，
+        /// 所以完全没有理由冻在 Rebuild 里。旧实现恰恰把它们拷进 <see cref="MassSpringSystem"/>
+        /// 就再也不管了，而 <c>OnValidate</c> 在播放模式又故意跳过重建 ——
+        /// 于是播放中拖 Inspector 的这四项**完全没有反应，也不报错**。
+        /// 软体在 v1.6.0 修过同一类问题（<c>SoftBodySimulation.Step</c>），这里是同一个成因。
+        /// </summary>
+        void SyncRuntimeParameters()
+        {
+            MassSpringParameters p = _system.Parameters;
+            p.gravity = gravity;
+            p.globalDamping = globalDamping;
+            p.substeps = substeps;
+            p.maxDeltaTime = maxDeltaTime;
+        }
+
+        // ------------------------------------------------------------------
+        // 互碰（IParticleBody）：质点弹簧与软体/布料走同一套球云代理。
+        // 半径直接用 particleRadiusBase（与 Gizmos 画的同一个量），不另发明一套尺寸。
+        // ------------------------------------------------------------------
+        int _cloudVersion = 1;
+        Matrix4x4 _cloudMatrix = Matrix4x4.zero;
+        Vector3[] _cloudWorld = new Vector3[0];
+
+        /// <summary>参与互碰的质点数（含钉住的）。</summary>
+        public int CloudParticleCount { get { return _system == null ? 0 : _system.Particles.Count; } }
+
+        /// <summary>
+        /// 互碰球半径 = <see cref="particleRadiusBase"/> × 这个系数。
+        /// 这里默认 **1.0** 而不是软体/布料的 0.5：particleRadiusBase 本来就是**绝对半径**（画出来多大就是多大），
+        /// 而那两个是"间距 × 系数"。口径不同 ⇒ 系数含义也不同，强行统一默认值反而会把已发布的
+        /// 质点弹簧外观与互碰距离一起改掉。想更贴身就把这个系数调小。
+        /// </summary>
+        [Tooltip("互碰球半径 = 质点基础半径 × 此系数。默认 1.0：质点弹簧的半径基数是绝对值，不是间距折算。")]
+        public float cloudRadiusFactor = 1f;
+
+        /// <summary>球半径：取 <see cref="particleRadiusBase"/> × <see cref="cloudRadiusFactor"/>，下限 0.01 m。</summary>
+        public float CloudRadius
+        {
+            get
+            {
+                float factor = cloudRadiusFactor > 0f ? cloudRadiusFactor : 0f;
+                float r = (particleRadiusBase > 0.01f ? particleRadiusBase : 0.01f) * factor;
+                return r > 0.001f ? r : 0.001f;
+            }
+        }
+
+        /// <summary>质点或变换每变一次自增；读取幂等，但会顺手自检变换矩阵。</summary>
+        public int CloudVersion
+        {
+            get
+            {
+                Matrix4x4 now = transform.localToWorldMatrix;
+                if (now != _cloudMatrix) { _cloudMatrix = now; _cloudVersion++; }
+                return _cloudVersion;
+            }
+        }
+
+        /// <summary>当前世界坐标下的质点位置（前 <see cref="CloudParticleCount"/> 个有效）。</summary>
+        public Vector3[] CloudWorldPositions()
+        {
+            var particles = _system == null ? null : _system.Particles;
+            int count = particles == null ? 0 : particles.Count;
+            if (_cloudWorld.Length < count) _cloudWorld = new Vector3[Mathf.Max(count, 16)];
+            Matrix4x4 toWorld = transform.localToWorldMatrix;
+            _cloudMatrix = toWorld;
+            for (int i = 0; i < count; i++) _cloudWorld[i] = toWorld.MultiplyPoint(particles[i].position);
+            return _cloudWorld;
+        }
+
+        /// <summary>本体的碰撞集合，互碰组会往里挂别人的球云。</summary>
+        public CollisionSet ParticleCollisions { get { return _system == null ? null : _system.Collisions; } }
+
+        /// <summary>Inspector 上那个字段与 <c>group.Add(this)</c> 的回写共用同一个入口。</summary>
+        ParticleInteractionGroup IParticleBody.CloudGroup
+        {
+            get { return interactionGroup; }
+            set { interactionGroup = value; }
+        }
+
+        void OnDestroy()
+        {
+            if (interactionGroup != null) interactionGroup.Remove(this);
         }
 
         [Tooltip("让场景里的 Collider 参与碰撞（本版只解析球/盒/胶囊；MeshCollider 会被跳过）。默认关：不该因为升级就改变现有场景")]
@@ -103,13 +210,18 @@ namespace PhysicsSimulation
         bool _collidersSynced;
 
         /// <summary>
-        /// 把组件变换与 Collider 列表同步给系统。没开开关时注入单位矩阵，
+        /// 把组件变换与 Collider 列表同步给系统。既没开开关、又不在互碰组里时注入单位矩阵，
         /// 于是默认路径逐位等价于 v1.0.0（一条回归测试专门锁这件事）。
+        /// 但**互碰组也必须注入**：球云存的是世界坐标、登记的也是 World 空间。
         /// </summary>
         void SyncSceneColliders()
         {
             if (_system == null) return;
-            if (!collideWithSceneColliders)
+
+            // 惰性入组：Inspector 里拖了组但没人调 Add 是最常见的用法
+            if (interactionGroup != null && !interactionGroup.Contains(this)) interactionGroup.Add(this);
+
+            if (!collideWithSceneColliders && interactionGroup == null)
             {
                 _system.SetSimulationToWorld(Matrix4x4.identity);
                 return;
@@ -132,6 +244,9 @@ namespace PhysicsSimulation
                 _system = MassSpringBuilder.Build(particles, springs, gravity, globalDamping, substeps, maxDeltaTime);
                 _collidersSynced = false;
                 _lastBuildError = null;
+
+                // Rebuild 会换掉整个碰撞集合，互碰代理必须重新挂回去
+                if (interactionGroup != null) interactionGroup.Reattach(this);
                 return true;
             }
             catch (ArgumentOutOfRangeException exception)

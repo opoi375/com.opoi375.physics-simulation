@@ -65,6 +65,19 @@ Common members: `Rebuild()`, `Step(dt)`, `ResetToInitialLayout()`, `Simulation`,
 `ParticlePositions`, `EffectiveParticleRadius`, `RenderBatchCount(n, max)` (`DrawMeshInstanced` caps at 1023 per call,
 so larger clouds are split automatically).
 
+::: tip Local space, and which parameters are live (v1.6.0)
+The lattice is generated around the component's **own origin** — `FluidVolume.Sphere` included, which used to be centred
+on `transform.localPosition` (a component at (3,0,0) generated its sphere at local (3,0,0), i.e. world (6,0,0)). Every
+particle coordinate is local, and `localToWorld` is applied only at render time.
+
+| Live during Play | Needs `Rebuild()` |
+| --- | --- |
+| `restDensity`, `kernelRadius` (the neighbour table is rebuilt every substep), `substeps`, `solverIterations`, `complianceAlpha`, `clampTensileLambda`, `xsphViscosity`, `vorticityEpsilon`, `gravity`, `collisionThickness`, `maxDeltaTime`, `maxSpeed` | `particleSpacing` (the lattice and the grid cell size are derived from it), `maxParticles` (only used to refuse an over-budget build) |
+
+`substeps` / `solverIterations` are floored at 1 at run time through `EffectiveSubsteps` / `EffectiveSolverIterations`.
+Before v1.6.0 a `0` produced `dt / 0` and a loop that never ran: the water froze with no exception, no log and no NaN.
+:::
+
 ## 3. What happens inside one substep
 
 ```
@@ -199,6 +212,7 @@ went red exactly that way. Use `Destroy` at runtime, `DestroyImmediate` in the e
 It only reads particle positions and never touches the solver, so **the simulation result is identical** whether the
 surface is on or off; `Both` is two draw submissions, numerically identical to `Particles`
 (pinned from the behaviour side by the three `RenderMode_*` tests).
+:::
 
 ## 7. Editor tools and the demo scene
 
@@ -262,20 +276,6 @@ corners must not cross any plate that is still drawn (`SegmentIntersectsPlate`).
 :::
 
 ::: warning The water column must not touch a wall at spawn time
-If the initial lattice touches a wall and the floor at the same time (distance 0 to several faces，) the
-shallowest axis degenerates into a tie-break and the ejection direction is arbitrary — whole batches ended up
-under the floor. The demo keeps one particle spacing of clearance per side
-(`DemoConfig_ColumnClearsEveryWallSoTheProxyHasNoTies`).
-:::
-
-::: warning Place spawn geometry from measured particles, not from shape parameters
-If the initial lattice touches a wall and the floor at the same time (distance 0 to several faces, ) the
-shallowest axis degenerates into a tie-break and the ejection direction is arbitrary — whole batches ended up
-under the floor. The demo keeps one particle spacing of clearance per side
-(`DemoConfig_ColumnClearsEveryWallSoTheProxyHasNoTies`).
-:::
-
-::: warning Place spawn geometry from measured particles, not from shape parameters
 If the initial lattice touches a wall **and** the floor simultaneously (distance 0 to several faces), "shallowest axis"
 degenerates into a tie-break and the push direction becomes arbitrary — entire batches got shoved under the floor.
 The demo leaves one particle spacing on every side (`DemoConfig_ColumnClearsEveryWallSoTheProxyHasNoTies`).
@@ -311,7 +311,8 @@ table lists both measurements; the benchmark gates assert *ratios*, not absolute
   the managed solver will not finish a step inside 16.7 ms.
 - The table times `Step()` only; `DrawMeshInstanced` cost is not included.
 
-`v1.6.0` (Jobs + Burst optional assembly) targets an order of magnitude on these numbers.
+The Jobs + Burst optional assembly is still planned (it is **not** in v1.6.0, which shipped particle interaction and the
+parameter contract) and targets an order of magnitude on these numbers.
 
 ## 9. Known limits
 
@@ -337,6 +338,7 @@ table lists both measurements; the benchmark gates assert *ratios*, not absolute
 
 - [Fluid parameter reference](/en/reference/fluid-parameters)
 - [Scene collision](/en/collision/)
+- [Particle interaction](/en/interaction/) (bodies pushing each other; the fluid is not part of it)
 - [Cloth simulation](/en/cloth/) (same PBD family, different constraint)
 - [Editor tools](/en/tools/)
 - [Changelog](/en/changelog)

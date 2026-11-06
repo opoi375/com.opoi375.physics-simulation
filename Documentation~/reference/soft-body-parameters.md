@@ -2,7 +2,16 @@
 
 命名空间 `PhysicsSimulation`（扁平，没有 `PhysicsSimulation.SoftBody` 这种子命名空间）。
 `SoftBodyParameters.Validate()` 会在构造 `SoftBodySimulation` 时自动调用，非法值**立刻抛异常**，
-不会悄悄给你一个数值已经溢出的模拟。
+不会悄悄给你一个数值已经溢出的模拟。`SoftBodyParameters` 从 v1.6.0 起是 `[Serializable]`，所以这十几项参数终于能在 Inspector 里直接调。
+
+## 生效方式（v1.6.0 起的契约）
+
+| 生效方式 | 字段 | 为什么 |
+| --- | --- | --- |
+| 立即生效（`[RuntimeTunable]`） | `gravity`、`damping`、`maxSpeed`、`volumeStiffness`、`volumeDamping`、`substeps`、`maxDeltaTime`、`enableStretchLimit`、`maxStretchRatio`、`collisionThickness` | `gravity` / `damping` 旧版在 `Build()` 里被拷进 `MassSpringSystem`，改完静默无效；现在 `Step()` 开头每步同步 |
+| 需要 `Rebuild()`（`[RequiresRebuild]`） | `mass`、`weldTolerance`、`springStiffness`、`springDamping`、`bendStiffness`、`bendDamping` | `Spring.stiffness` 是 `readonly`，Build 时烘进弹簧；`bendStiffness = 0` 时根本不生成弯曲弹簧；焊接只在 Build 时跑一次 |
+
+求解器持有的是 Behaviour 的**同一个** `SoftBodyParameters` 实例（`ReferenceEquals`），不存在"改了一份、求解器看另一份"。
 
 ## 输入网格：`SoftBodyMeshData`
 
@@ -17,20 +26,20 @@
 
 | 字段 | 默认 | 约束 | 说明 |
 | --- | --- | --- | --- |
-| `mass` | 1 | 有限且 `> 0` | 每个质点的质量（千克）。弹簧力与体积力都按 `1/mass` 折算加速度 |
+| `mass` | 1 | 有限且 `> 0` | 每个质点的质量（千克，**需重建**）。弹簧力与体积力都按 `1/mass` 折算加速度 |
 | `gravity` | `(0, -9.81, 0)` | 有限 | 常重力加速度，局部空间 |
 | `damping` | 0.5 | `>= 0` | 全局速度衰减，每小步 `v /= 1 + damping·h`。想多晃几秒就调小它 |
 | `maxSpeed` | 40 | `>= 0`（0 表示不限） | 速度封顶。**最后一道防线**，正常参数下永远碰不到 |
-| `springStiffness` | 1200 | 有限且 `>= 0` | 结构弹簧刚度（牛顿每米，真实弹簧系数，不是布料那套 PBD 比值）。要"软"就往下调，演示果冻用 130 |
-| `springDamping` | 6 | `>= 0` | 结构弹簧的轴向阻尼，抑制来回抖 |
-| `bendStiffness` | 150 | `>= 0` | 弯曲弹簧刚度（对顶点距离保持） |
-| `bendDamping` | 2 | `>= 0` | 弯曲弹簧阻尼 |
+| `springStiffness` | 1200 | 有限且 `>= 0` | 结构弹簧刚度（牛顿每米，真实弹簧系数，不是布料那套 PBD 比值）。要"软"就往下调，演示果冻用 130。**需重建**（烘进 `readonly` 的 `Spring.stiffness`） |
+| `springDamping` | 6 | `>= 0` | 结构弹簧的轴向阻尼，抑制来回抖。**需重建**（烘进 `readonly` 的弹簧字段） |
+| `bendStiffness` | 150 | `>= 0` | 弯曲弹簧刚度（对顶点距离保持）。**需重建**：`0` 表示根本不生成弯曲弹簧，拓扑在建时就定下了 |
+| `bendDamping` | 2 | `>= 0` | 弯曲弹簧阻尼。**需重建** |
 | `volumeStiffness` | 4000 | `>= 0` | 体积约束刚度：`F = -k_v·(V-V₀)·∇V`。0 表示关掉体积（会瘪） |
 | `volumeDamping` | 20 | `>= 0` | 体积变化率阻尼 `c_v·dV/dt`，防止充气过度来回鼓 |
 | `substeps` | 4 | `>= 1` | 一个 `Step(dt)` 内切几个小步。**提高它比提高刚度划算** |
 | `maxDeltaTime` | 1/15 | 有限且 `> 0` | `ClampDeltaTime(dt)` 上限，卡顿一帧也不会把软体炸掉 |
 | `collisionThickness` | 0.01 | 有限且 `>= 0` | **（v1.3.0）** 质点皮肤厚度。软体落地时"最低质点高出地面上表面多少"就等于这个数 |
-| `weldTolerance` | 1e-4 | 有限且 `> 0` | 顶点焊接容差（米），**是半径不是直径**：缝隙 ≤ 它才合并；够不到缝就裂成两套质点、拓扑不闭合、体积约束被静默跳过。详见[从任意网格到质点](/soft-body/mesh-to-particles) |
+| `weldTolerance` | 1e-4 | 有限且 `> 0` | 顶点焊接容差（米），**是半径不是直径**：缝隙 ≤ 它才合并；够不到缝就裂成两套质点、拓扑不闭合、体积约束被静默跳过。**需重建**（焊接只在 Build 时跑一次）。详见[从任意网格到质点](/soft-body/mesh-to-particles) |
 | `enableStretchLimit` | true | — | 是否做最大拉伸限幅 |
 | `maxStretchRatio` | 2 | `> 1` | 结构弹簧允许的最大长度比，超限后 8 趟 Gauss-Seidel 位置投影 |
 
@@ -50,6 +59,8 @@
 | `generateMesh` | true | 关掉则只跑求解器，不生成实例网格 |
 | `recalculateNormals` | true | 每帧重算法线。关掉省一点时间，但光照跟着旧法线走 |
 | `drawGizmoWireframe` | true | Scene 视图画结构弹簧与质点（钉住的画大点） |
+| `interactionGroup` | null | 所在的多体互碰组；与 `group.Add(this)` 走同一个入口 |
+| `cloudRadiusFactor` | 0.5 | 互碰球半径 = 平均质点间距 × 此系数（相邻两球相切），另受静息尺度上界 `cbrt(静息体积) × 0.25` 钳制。详见[多体互碰](/interaction/) |
 
 ## 拓扑规则
 
@@ -77,6 +88,7 @@
 | `Step(float dt)` | 推进（内部做 `ClampDeltaTime` 与子步） |
 | `ResetToInitial()` / `CaptureInitialLayout()` | 回到初始布局 / 把当前姿态设为初始布局 |
 | `MaxStretchRatio()` | 所有结构弹簧的最大 `length/restLength` |
+| `IrreparableStretchEdges` | 上一轮限幅里**两端都钉死**、无法修正的超限边数。非 0 说明你的钉法把某条约束焊死了，再调 `maxStretchRatio` 也不会改善 |
 | `HasNonFiniteState()` | 任一质点出现 NaN / Infinity 即为 true |
 | `CollectEdges(List<ValueTuple<Vector3,Vector3>>, bool includeBend)` | Gizmos / 调试用的线段集合（局部空间） |
 

@@ -5,16 +5,32 @@ using UnityEngine;
 
 namespace PhysicsSimulation
 {
-    /// <summary>一条已登记的碰撞代理：几何 + 它所在的空间。</summary>
+    /// <summary>一条已登记的碰撞代理：几何 + 它所在的空间 + 谁登记的。</summary>
     public struct CollisionEntry
     {
         public ICollisionProxy Proxy;
         public CollisionProxySpace Space;
 
+        /// <summary>
+        /// 登记者。null = 无主（脚本手工塞的）；否则是拥有它的对象（比如 Collider 桥、互碰组）。
+        /// 有了它，“刷新自己那批”才不会顺手把别人的代理一起清掉 —— 这是互碰能跟
+        /// <c>collideWithSceneColliders</c> 共存的前提（以前桥接每步一次 <c>ClearWorldSpace()</c>，
+        /// 会把同空间的互碰代理抹干，表现为“编辑器里接上了、跑起来一点不碰”）。
+        /// </summary>
+        public object Owner;
+
         public CollisionEntry(ICollisionProxy proxy, CollisionProxySpace space)
         {
             Proxy = proxy;
             Space = space;
+            Owner = null;
+        }
+
+        public CollisionEntry(ICollisionProxy proxy, CollisionProxySpace space, object owner)
+        {
+            Proxy = proxy;
+            Space = space;
+            Owner = owner;
         }
     }
 
@@ -41,9 +57,43 @@ namespace PhysicsSimulation
             _entries.Add(new CollisionEntry(proxy, space));
         }
 
+        /// <summary>带登记者地登记，给“每步重建自己那批”的组件用（Collider 桥、互碰组）。</summary>
+        public void Add(ICollisionProxy proxy, CollisionProxySpace space, object owner)
+        {
+            if (proxy == null)
+            {
+                throw new ArgumentNullException("proxy", "碰撞代理不允许为 null：不支持的 Collider 应当在外面先判掉");
+            }
+            _entries.Add(new CollisionEntry(proxy, space, owner));
+        }
+
         public void Add(ICollisionProxy proxy)
         {
             Add(proxy, CollisionProxySpace.Simulation);
+        }
+
+        /// <summary>
+        /// 按**引用**摘掉一个代理（不是按相等），返回摘掉几个。
+        /// 互碰组需要它：体重建、退出组、组被停用时都必须把线拆干净，
+        /// 否则留下的就是一个“不再更新的旧云” —— 比完全不碰更难查。
+        /// 不排序、不去重、不动其余条目的顺序，所以剩下的代理裁决顺序与从前一致。
+        /// </summary>
+        public int Remove(ICollisionProxy proxy)
+        {
+            if (proxy == null)
+            {
+                throw new ArgumentNullException("proxy", "要摘掉的代理不允许为 null：要清空请用 Clear()");
+            }
+            int removed = 0;
+            for (int i = _entries.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(_entries[i].Proxy, proxy))
+                {
+                    _entries.RemoveAt(i);
+                    removed++;
+                }
+            }
+            return removed;
         }
 
         /// <summary>
@@ -57,6 +107,29 @@ namespace PhysicsSimulation
             {
                 if (_entries[i].Space == CollisionProxySpace.World) _entries.RemoveAt(i);
             }
+        }
+
+        /// <summary>
+        /// 只清掉**指定登记者**的世界空间条目（按引用比登记者）。
+        /// 这是与 <see cref="ClearWorldSpace()"/> 的关键区别：后者会把别人登记的也一锅抹，
+        /// 前者只回收自己放的那一批。
+        /// </summary>
+        public int ClearWorldSpaceOwnedBy(object owner)
+        {
+            if (owner == null)
+            {
+                throw new ArgumentNullException("owner", "要清全部请用 ClearWorldSpace()，传 null 到这里是写错了");
+            }
+            int removed = 0;
+            for (int i = _entries.Count - 1; i >= 0; i--)
+            {
+                if (_entries[i].Space == CollisionProxySpace.World && ReferenceEquals(_entries[i].Owner, owner))
+                {
+                    _entries.RemoveAt(i);
+                    removed++;
+                }
+            }
+            return removed;
         }
 
         /// <summary>
@@ -104,6 +177,20 @@ namespace PhysicsSimulation
                                             Matrix4x4 localToWorld, Matrix4x4 worldToLocal, bool worldIsIdentity,
                                             Vector3[] contacts)
         {
+            ResolvePositions(set, positions, skin, localToWorld, worldToLocal, worldIsIdentity, contacts, null);
+        }
+
+        /// <summary>
+        /// 同上，另外可传每个质点的**逆质量**：<c>&lt;= 0</c> 的质点一律不动。
+        /// 传 null 就是原来的行为（逐位不变），给根本没有“钉住”概念的求解器（流体）用。
+        /// 这不是锦上添花，而是补漏洞：<see cref="ResolveParticles"/> 一开始就有这条设卡
+        /// （“固定点不参与碰撞：它由脚本钉着，顶它没意义”），而基于 <c>Vector3[]</c> 的这条路径漏了，
+        /// 于是同一个包里，软体/质点弹簧的钉住点顶不动、布料的钉住点会被 Collider 或互碰顶跑。
+        /// </summary>
+        public static void ResolvePositions(CollisionSet set, Vector3[] positions, float skin,
+                                            Matrix4x4 localToWorld, Matrix4x4 worldToLocal, bool worldIsIdentity,
+                                            Vector3[] contacts, float[] inverseMass)
+        {
             List<CollisionEntry> entries = set.Entries;
             for (int e = 0; e < entries.Count; e++)
             {
@@ -114,6 +201,7 @@ namespace PhysicsSimulation
                     // 模拟空间（或变换本来就是单位矩阵）：直接对局部位置算，逐位等价于 v1.2.0 的旧路径
                     for (int i = 0; i < positions.Length; i++)
                     {
+                        if (inverseMass != null && inverseMass[i] <= 0f) continue;   // 钉住的：由脚本拿着，顶它没意义
                         Vector3 before = positions[i];
                         positions[i] = entry.Proxy.PushOut(before, skin);
                         if (contacts != null)
@@ -128,6 +216,7 @@ namespace PhysicsSimulation
                 float worldSkin = skin * AverageScale(localToWorld);
                 for (int i = 0; i < positions.Length; i++)
                 {
+                    if (inverseMass != null && inverseMass[i] <= 0f) continue;      // 同上：钉住的不参与
                     Vector3 world = localToWorld.MultiplyPoint(positions[i]);
                     Vector3 resolved = entry.Proxy.PushOut(world, worldSkin);
                     if (resolved != world)

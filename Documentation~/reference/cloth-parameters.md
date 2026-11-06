@@ -1,7 +1,19 @@
 # 布料参数参考
 
-`ClothParameters`（命名空间 `PhysicsSimulation`）。所有字段都可以在 Inspector 里改，改完记得 `ClothBehaviour.Rebuild()`。
-`Validate()` 会在构造 `ClothSimulation` 时自动调用，非法值**立刻抛异常**，不会悄悄给出一个错的模拟。
+`ClothParameters`（命名空间 `PhysicsSimulation`）。所有字段都可以在 Inspector 里改，**改完要不要重建见下面"生效方式"**。
+`Validate()` 会在构造 `ClothSimulation` 时自动调用，非法值**立刻抛异常**，不会悄悄给出一个错的模拟；它现在还检查 `substeps` / `iterations` / `maxDeltaTime`（旧版三个都没查）。
+运行期另有兜底：`Step()` 把两个整数钳到 ≥1、把 `dt` 钳到上限。
+
+## 生效方式（v1.6.0 起的契约）
+
+| 生效方式 | 字段 | 为什么 |
+| --- | --- | --- |
+| 立即生效（`[RuntimeTunable]`） | `gravity`、`damping`、`structuralStiffness`、`shearStiffness`、`bendStiffness`、`enableShear`、`enableBend`、`substeps`、`iterations`、`maxDeltaTime`、`maxStretchRatio`、`collisionThickness` | 每步直接读参数 |
+| 需要 `Rebuild()`（`[RequiresRebuild]`） | `columns`、`rows`、`spacing`、`mass` | 网格与约束表在构造时按行列数分配；逆质量在构造时算好一份，`SetPinned` 复用它 |
+
+`mass` 必须重建：旧实现构造时烘 `1/mass`、`SetPinned` 又读实时值，同一块布会出现两种质量；`mass = 0` 写进 `+Infinity`，三步内全变 NaN。
+现在 `mass = 0` 不再产生 Infinity/NaN，但改了 `mass` 仍然需要 `Rebuild()`。
+求解器持有的是 Behaviour 的**同一个** `ClothParameters` 实例（`ReferenceEquals`），不存在"改了一份、求解器看另一份"。
 
 ## 网格
 
@@ -10,7 +22,7 @@
 | `columns` | 16 | `>= 2` | 列数（局部 `+X` 方向） |
 | `rows` | 16 | `>= 2` | 行数（局部 `-Y` 方向） |
 | `spacing` | 0.1 | 有限且 `> 0` | 相邻质点静止距离，单位米。整块布尺寸 = `(columns-1)·spacing × (rows-1)·spacing` |
-| `mass` | 1 | 有限且 `> 0` | 单个质点质量。距离约束用 `inverseMass` 分配修正量，所以均匀质量下 `mass` 只影响与外力求解器混用时的表现 |
+| `mass` | 1 | 有限且 `> 0` | 单个质点质量（**需重建**）。距离约束用 `inverseMass` 分配修正量，所以均匀质量下 `mass` 只影响与外力求解器混用时的表现 |
 
 ## 力与积分
 
@@ -39,7 +51,7 @@
 
 | 字段 | 默认 | 约束 | 说明 |
 | --- | --- | --- | --- |
-| `maxStretchRatio` | 2 | 有限且 `>= 1` | 单条约束最大 `长度/静止长度`。每小步投影后做多轮限幅扫描（最多 32 轮） |
+| `maxStretchRatio` | 2 | 有限且 `>= 1` | 单条约束最大 `长度/静止长度`。每小步投影后做多轮限幅扫描（最多 **16** 轮） |
 | `collisionThickness` | 0.01 | 有限且 `>= 0` | 质点与碰撞代理的最小间距（相当于布的"厚度"）。v1.3.0 起对桥接进来的场景 Collider 同样生效 |
 
 ::: warning 两点诚实的说明

@@ -23,7 +23,8 @@ function sidebarZh() {
         { text: '从网格到质点（焊接原理）', link: '/soft-body/mesh-to-particles' },
         { text: '真实模型实测', link: '/soft-body/model-audit' },
         { text: '碰撞代理（Collision）', link: '/collision/' },
-        { text: '流体模拟（Fluid）', link: '/fluid/' }
+        { text: '流体模拟（Fluid）', link: '/fluid/' },
+        { text: '多体互碰（Interaction）', link: '/interaction/' }
       ]
     },
     {
@@ -62,7 +63,8 @@ function sidebarEn() {
         { text: 'Mesh to Particles (welding)', link: '/en/soft-body/mesh-to-particles' },
         { text: 'Real-Model Audit', link: '/en/soft-body/model-audit' },
         { text: 'Collision Proxies', link: '/en/collision/' },
-        { text: 'Fluid Simulation (PBF)', link: '/en/fluid/' }
+        { text: 'Fluid Simulation (PBF)', link: '/en/fluid/' },
+        { text: 'Particle Interaction', link: '/en/interaction/' }
       ]
     },
     {

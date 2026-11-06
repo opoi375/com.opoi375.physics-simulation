@@ -97,13 +97,30 @@ Quick tuning guide:
 - Fabric feels like sheet metal → lower `bendStiffness` (0.05–0.1 soft, 0.3+ canvas/leather).
 - Jitter or tunnelling → raise `substeps` (better value than raising `iterations`).
 - Need performance → `iterations = 1`, disable `enableBend`, lower grid resolution.
-- Want a hard safety net under extreme parameters → `maxStretchRatio`, enforced by up to 32 clamping sweeps.
+- Want a hard safety net under extreme parameters → `maxStretchRatio`, enforced by up to 16 clamping sweeps.
 
 ::: warning Stretch clamping is a Gauss-Seidel approximation
-`ClampStretch()` sweeps up to 32 times; fixing one edge can over-stretch another, so the guarantee is convergence, not an
-exact simultaneous solve. Collisions are resolved *after* clamping, which makes "no particle inside a sphere" a hard
-guarantee while accepting that a constraint may momentarily exceed `maxStretchRatio`.
+`ClampStretch()` sweeps up to 16 times (and stops as soon as a pass finds nothing to fix); fixing one edge can
+over-stretch another, so the guarantee is convergence, not an exact simultaneous solve. Collisions are resolved *after*
+clamping, which makes "no particle inside a sphere" a hard guarantee while accepting that a constraint may momentarily
+exceed `maxStretchRatio`.
 :::
+
+## 4.5 Which parameters are live and which need a rebuild (v1.6.0)
+
+Every field in `ClothParameters` carries exactly one marker, and a reflection test fails if a new field carries
+neither — "the solver copied my field at build time" used to be a silent bug in four modules.
+
+| Live (change it during Play, no rebuild) | Needs `Rebuild()` |
+| --- | --- |
+| `gravity`, `damping` | `columns`, `rows` (the grid and the constraint table are allocated at construction) |
+| `structuralStiffness`, `shearStiffness`, `bendStiffness`, `enableShear`, `enableBend` | `spacing` (rest lengths are baked in metres at build time) |
+| `substeps`, `iterations`, `maxDeltaTime` | `mass` (the free-particle inverse mass is computed once and reused by `SetPinned`) |
+| `maxStretchRatio`, `collisionThickness` | |
+
+`substeps` and `iterations` are floored at 1 inside `Step()` and `dt` is clamped by `maxDeltaTime`, so a zero typed into
+the Inspector costs one pass instead of dividing by zero. `mass = 0` no longer writes `+Infinity` (which used to become
+NaN within three frames) — `Validate()` rejects it at construction, and once the cloth is built, `mass` is rebuild-only.
 
 ## 5. Measured performance (managed solver, no Burst)
 
@@ -121,7 +138,7 @@ the same code measured 7.73 / 32.36 ms on a loaded machine, which pierced the ol
 measuring how idle the box is, not whether the solver regressed. The real complexity gate is
 `Benchmark_ClothCostScalesNearLinearlyWithParticleCount`, which uses a **ratio**: 32×32 (1024 particles) against
 64×64 (4096), four times the particles and four times the constraints, so linear scaling is ~4× the time while an
-O(n²) regression would approach 16× (gate: 12). Background load multiplies into both sizes and cancels in the ratio. The optional Jobs + Burst assembly planned for `v1.6.0`
+O(n²) regression would approach 16× (gate: 12). Background load multiplies into both sizes and cancels in the ratio. The optional Jobs + Burst assembly
 exists to push 64 × 64 back under a single frame.
 
 ## 6. Editor tools
@@ -134,4 +151,5 @@ exists to push 64 × 64 back under a single frame.
 
 - [Cloth parameter reference](/en/reference/cloth-parameters)
 - [Mass-spring module](/en/mass-spring/)
+- [Particle interaction](/en/interaction/) — let this cloth push against a soft body
 - [Changelog](/en/changelog)

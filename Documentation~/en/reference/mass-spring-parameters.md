@@ -10,10 +10,10 @@ The driver component (`Add Component → Physics Simulation / Mass Spring Behavi
 
 | Field | Type | Default | Unit | Notes |
 | --- | --- | --- | --- | --- |
-| `gravity` | Vector3 | `(0, -9.81, 0)` | m/s² | set to zero to isolate spring behaviour |
-| `globalDamping` | float | `0.5` | 1/s | global linear damping, applied as the divisor `(1 + c·dt)`, can never flip the sign |
-| `substeps` | int | `8` | count | how many sub-steps one `FixedUpdate` is split into; the main stability knob, cost is linear |
-| `maxDeltaTime` | float | `1/15` | s | dt clamp |
+| `gravity` | Vector3 | `(0, -9.81, 0)` | m/s² | set to zero to isolate spring behaviour; **live** (mirrored into the system every `Step` since v1.6.0) |
+| `globalDamping` | float | `0.5` | 1/s | global linear damping, applied as the divisor `(1 + c·dt)`, can never flip the sign; **live** |
+| `substeps` | int | `8` | count | how many sub-steps one `FixedUpdate` is split into; the main stability knob, cost is linear; **live** |
+| `maxDeltaTime` | float | `1/15` | s | dt clamp; **live** |
 | `collisionThickness` | float | `0.01` | m | **(v1.3.0)** skin between a particle and a collision proxy; scaled for world-space proxies. See [Collision proxies](/en/collision/) |
 
 ### `particles` list
@@ -91,7 +91,7 @@ Syncs `transform.position` in `LateUpdate`. Purely cosmetic — removing it does
 | `Springs` | `IReadOnlyList<Spring>` | read-only view (elements are immutable) |
 | `AddParticle` | `int AddParticle(Vector3 position, float mass, bool pinned = false, float damping = 0f)` | returns the index; throws `ArgumentOutOfRangeException` on non-finite positive mass, NaN/Inf position, negative damping |
 | `AddSpring` | `int AddSpring(int a, int b, float restLength, float stiffness, float damping)` | returns the index; `restLength <= 0` auto-measures; throws on out-of-range indices, `a == b`, invalid parameters |
-| `Pin` / `Unpin` | `void Pin(int index)` | toggles `inverseMass` between `0` and `1/mass`; throws on bad index |
+| `Pin` / `Unpin` | `void Pin(int index)` | `Pin` sets `pinned = true`, `inverseMass = 0` **and velocity = 0** (an immovable constraint, not merely a force-free one); `Unpin` restores `1/mass`. Throws on bad index |
 | `ApplyForces` | `void ApplyForces()` | zero accumulators → gravity → spring internal forces |
 | `Step` | `void Step(float deltaTime)` | clamp dt → sub-steps, each `ApplyForces()` + integrate; throws on `dt <= 0`, NaN or Inf |
 | `ResetToInitial` | `void ResetToInitial()` | restores position, velocity, pinned state and per-particle damping; zeroes forces |
@@ -100,7 +100,11 @@ Syncs `transform.position` in `LateUpdate`. Purely cosmetic — removing it does
 
 ## `Particle` / `Spring`
 
-See [Mass-Spring §4](/en/mass-spring/). Key points: `force` is a **per-step accumulator**, `inverseMass` is owned by `Pin`/`Unpin`, and every `Spring` field is `readonly` (rebuild to change a spring).
+See [Mass-Spring §4](/en/mass-spring/). Key points: `force` is a **per-step accumulator**, `inverseMass` is owned by `Pin`/`Unpin` (which also clears velocity), and every `Spring` field is `readonly` (rebuild to change a spring).
+
+`MassSpringSystem` is the one solver that owns its `MassSpringParameters` instance instead of holding the behaviour's
+reference. `MassSpringBehaviour` therefore mirrors `gravity`, `globalDamping`, `substeps` and `maxDeltaTime` into it at the
+top of every `Step()`; a test asserts each of the four after a mid-play edit.
 
 ## Default parameters of the demo chain
 

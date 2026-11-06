@@ -124,6 +124,22 @@ The tank geometry is not arbitrary — `FluidDemoToolsTests` pins three things, 
 
 All of it lives in constants in `FluidDemoTools`, not in the scene, so every menu run rebuilds the same geometry.
 
+## Interaction tools (v1.6.0)
+
+Menus live under **Tools → Physics Simulation → Interaction**, priorities 130~132 (the same numbers as the fluid group —
+they sit under a different submenu).
+
+| Menu item | Priority | What it does | Writes to disk |
+| --- | --- | --- | --- |
+| Create Interaction Demo Scene | 130 | New scene → two jellies + a scarf, all three registered in one `ParticleInteractionGroup`, with camera and light → saved as `Assets/Scenes/ParticleInteractionDemo.unity` | ✅ via `DemoSceneSave`; aborts if an open scene has no path |
+| Build In Current Scene | 131 | Adds the same three bodies to the open scene | ❌ marks dirty only |
+| Dump State | 132 | Nearest sphere-centre distance, each body's cloud radius and the penetration depth per body — the numbers that say whether contact is happening at all | ❌ |
+
+The spacing is a measured value, not a round number: the two jellies start 0.56 m apart, i.e. a **0.06 m face gap** with
+0.5 m bodies at 3 subdivisions. That is inside the 0.105 m trigger distance (`radius + skin`), so contact really happens,
+while the correction still needed is only 0.045 m — the earlier 0.18 m start was inside the trigger by a whole particle
+spacing and threw both bodies 4.61 m apart in a one-off recoil.
+
 ## Running the tests
 
 **Window → General → Test Runner → EditMode**. The package is embedded under `Packages/`, so its tests show up automatically — nothing needs to be added to `testables` in `Packages/manifest.json`.
@@ -137,11 +153,11 @@ All of it lives in constants in `FluidDemoTools`, not in the scene, so every men
 | `MassSpringDemoToolsTests.cs` | 5 | demo chain structure, decreasing stiffness, auto rest lengths, sub-step safety margin, visual bindings |
 | `FluidKernelTests.cs` | 9 | analytic integrals and boundary behaviour of poly6 / spiky gradient / viscosity laplacian (∫poly6=W(0), ∫spiky=W, ∇spiky=0 at the rim, negative radius, normalisation) |
 | `FluidNeighborSearchTests.cs` | 8 | hash grid + CSR: self-match excluded, radius semantics, bit-identical rebuilds, **count table must be cleared on rebuild** (this one caught a hidden viscosity bug), no neighbours lost across cells |
-| `FluidVolumeTests.cs` | 6 | box / sphere / cylinder sampling, count reconciliation, budget-truncation reporting, no duplicated corners |
+| `FluidVolumeTests.cs` | 6 | box / sphere / dam-break sampling, count reconciliation, budget-truncation reporting, no duplicated corners |
 | `FluidSimulationTests.cs` | 24 | rest density ≈ ρ0, compression, dam break pushes forward, XSPH adds no energy, vorticity creates nothing from nothing, tensile clamp, **the rail is a fuse, not the driver**, `maxDeltaTime`, **a second-scale first frame does not eject the water**, determinism, validation |
 | `FluidSurfaceTests.cs` | 19 | scalar-field splat (peak, monotone falloff, empty input, bit-identical), isosurface geometry (**watertight: boundary edges must be 0**, vertices inside sampled bounds, normals outward, two blobs must not bridge, budget grows the voxel, low iso must envelope high iso), the three `FluidBehaviour` render modes and throttling, demo surface constants and the six-sided tank |
 | `FluidTankSealTests.cs` | 2 | within 300 steps no particle leaves the six-sided tank (behaviour); the max single-step excursion (advection + correction rail) must fit inside the thinnest slab's distance to its mid-plane (structure) |
-| `FluidUnityLayer.cs` → `FluidUnityLayerTests.cs` | 10 | world↔local, proxy resync, budget truncation, `DrawMeshInstanced` builds no mesh, `DumpState` never throws |
+| `FluidUnityLayer.cs` → `FluidUnityLayerTests.cs` | 12 | local↔world, proxy resync, budget truncation, `DrawMeshInstanced` builds no mesh, `DumpState` never throws |
 | `FluidDemoToolsTests.cs` | 9 | budget vs actual count, sealed tank geometry, wall clearance, pool depth and camera framing, over-budget must warn |
 | `DemoSceneSaveTests.cs` | 2 | `CanSaveSilently` edges + **repo-wide scan forbidding dialog-popping save APIs** |
 | `ClothSimulationTests.cs` | 18 | topology and indexing, three constraint families, stretch clamp, sphere obstacles never penetrated, wind and damping, determinism, validation |
@@ -150,8 +166,19 @@ All of it lives in constants in `FluidDemoTools`, not in the scene, so every men
 | `SoftBodySimulationTests.cs` | 17 | vertex welding (plus three boundary cases on cell coordinates, tolerance and float precision), structural/bend topology, closedness and signed volume, volume retention, `SetVelocity`, validation and state immutability |
 | `SoftBodyUnityLayerTests.cs` | 11 | `SoftBodyBehaviour` local space, verbatim topology copy, four pin modes, `initialVelocity`, silent build failures |
 | `SoftBodyDemoToolsTests.cs` | 8 | demo jelly structure and kick, 180 steps without exploding, material source, procedural box winding and volume |
-
 | `SoftBodyMeshAuditTests.cs` | 22 | audit contract: verdict tiering (including the `InvertedWinding` / `DegenerateVolume` mis-report regressions), the note column, table column count surviving arbitrary error text |
 | `SoftBodyModelAuditToolsTests.cs` | 15 | mesh extraction, budget filtering, Markdown report with per-bucket total reconciliation, recommended-parameter scaling, the two-run comparison |
+| `CollisionProxyTests.cs` | 26 | the four `PushOut` rules per shape (outside untouched bit for bit, inside pushed out, undefined direction falls back without NaN, negative skin treated as 0), OBB shallowest-face exit, the inside-out container |
+| `CollisionIntegrationTests.cs` | 13 | the three solvers against injected proxies: landing and resting, `World`-space proxies applied through the transform, the bit-identical v1.2.0 path when the switch is off, legacy cloth obstacles coexisting with world boxes, `MeshCollider` reported as unsupported rather than crashed |
+| `ParticleInteractionTests.cs` | 35 | cloud proxy contract (live positions, bit-identical outside, surface + skin, fallback normal, overlapping chain leaves every sphere, bounded escape, empty cloud), group membership (join/leave, no self-collision, groups do not leak into each other, survives `Rebuild`), cross-solver contact, determinism, linear cost in body count, demo wiring |
+| `InelasticContactTests.cs` | 10 | the resting-contact invariant for all three solvers (a body on a plane must not keep separating speed), tangential velocity untouched, and `cloudRadiusFactor` defaults / round-trip / zero / rest-size cap |
+| `ParameterActivityTests.cs` | 12 | the v1.6.0 parameter contract: every field of the four parameter classes is classified exactly once (8 `[Test]` + one `[TestCaseSource]` case per class), every rebuild-only field explains *why*, and each behaviour's solver holds **the same instance** (`ReferenceEquals`) |
+| `ReviewRegressionTests.cs` | 16 | regression tests for the bugs found in the v1.6.0 review: pinning clears velocity and stops an already-moving point, soft-body pin drift, `ResetToInitialLayout` keeps the container, mass-spring live parameters, the fluid substep floor, cloth mass consistency, sphere volume centred on its own origin, `IrreparableStretchEdges`, and no Error log from `Destroy` in EditMode |
 
-270 EditMode tests in total: 30 mass-spring, 38 cloth, 36 soft body, **38 collision**, 22 model audit + 15 scanning tools, **89 fluid** (9 kernels + 8 neighbour search + 6 volume shapes + 24 solver + 19 surface + 2 tank seal + **12 Unity layer** + 9 demo tools) and 2 save-path tests.
+**344 EditMode tests in total**: 30 mass-spring, 38 cloth, 36 soft body, **39 collision** (26 proxy + 13 integration),
+22 model audit + 15 scanning tools, **89 fluid** (9 kernels + 8 neighbour search + 6 volume shapes + 24 solver + 19
+surface + 2 tank seal + **12 Unity layer** + 9 demo tools), 35 particle interaction, 10 resting contact, 12 parameter
+activity, 16 review regressions and 2 save-path tests.
+
+Counted per class from static `[Test]` + `[TestCase]` and reconciled against the runner. **Do not use the test bridge's
+namespace-level filter**: it answers with a stale subset (316), and a count from it is how the old figures here drifted.

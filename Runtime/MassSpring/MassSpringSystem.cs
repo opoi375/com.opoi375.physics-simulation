@@ -68,13 +68,18 @@ namespace PhysicsSimulation
             return _springs.Count - 1;
         }
 
-        /// <summary>把质点钉死（inverseMass = 0）。</summary>
+        /// <summary>
+        /// 把质点钉死（inverseMass = 0，速度立刻清零）。
+        /// 清速度是契约的一部分：钉住意味着"从此不可动"，不是"从此不受力"。
+        /// 只改 inverseMass 的话，一个正在飞的质点会保持原速度继续匀速平移。
+        /// </summary>
         public void Pin(int index)
         {
             ValidateParticleIndex(index, "index");
             Particle particle = _particles[index];
             particle.pinned = true;
             particle.inverseMass = 0f;
+            particle.velocity = Vector3.zero;
         }
 
         /// <summary>解开质点（inverseMass 恢复为 1/mass）。</summary>

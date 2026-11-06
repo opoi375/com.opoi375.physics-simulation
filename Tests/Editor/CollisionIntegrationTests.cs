@@ -304,6 +304,41 @@ namespace PhysicsSimulation.Editor.Tests
         }
 
         [Test]
+        public void Cloth_PinnedParticles_AreNotPushedByWorldProxy()
+        {
+            // Given：顶边钉住的布，把一个世界空间球代理直接套在某个钉住质点上，
+            //        半径大到同时罩住它下面那个自由质点（否则这条测试是空的，看不出代理有没有生效）
+            var parameters = new ClothParameters { columns = 6, rows = 4, spacing = 0.1f, iterations = 2, substeps = 2 };
+            var cloth = new ClothSimulation(parameters);
+            for (int col = 0; col < parameters.columns; col++) cloth.SetPinned(cloth.IndexOf(col, 0), true);
+
+            int probe = cloth.IndexOf(2, 0);
+            Assert.That(cloth.IsPinned(probe), Is.True, "第 2 列顶排本应是钉住的");
+            Vector3 anchor = cloth.GetPosition(probe);
+            cloth.Collisions.Add(new SphereCollisionProxy(anchor, 0.15f), CollisionProxySpace.World);
+
+            int coveredFree = 0;
+            for (int i = 0; i < cloth.ParticleCount; i++)
+                if (!cloth.IsPinned(i) && (cloth.GetPosition(i) - anchor).magnitude < 0.15f) coveredFree++;
+            Assert.That(coveredFree, Is.GreaterThan(0), "代理必须同时罩住自由质点，否则本测试什么也没验证");
+
+            // When
+            var before = cloth.CapturePositions();
+            for (int i = 0; i < 10; i++) cloth.Step(1f / 60f);
+            var after = cloth.CapturePositions();
+
+            // Then：钉住的逐位不动——与软体/质点弹簧同一契约，基于 Vector3[] 的布料路径以前漏了这条设卡
+            for (int i = 0; i < cloth.ParticleCount; i++)
+            {
+                if (!cloth.IsPinned(i)) continue;
+                Assert.That(Bits(after[i].x), Is.EqualTo(Bits(before[i].x)), "钉住质点 " + i + " 的 x 被代理顶走了");
+                Assert.That(Bits(after[i].y), Is.EqualTo(Bits(before[i].y)), "钉住质点 " + i + " 的 y 被代理顶走了");
+                Assert.That(Bits(after[i].z), Is.EqualTo(Bits(before[i].z)),
+                    "钉住质点不许被任何碰撞代理顶跑：它由脚本拿着，顶它只会把锚点弄丢");
+            }
+        }
+
+        [Test]
         public void Cloth_WorldBoxAndLegacySphereCoexist()
         {
             // Given：布料既有一个局部空间的球障碍，又有一个世界空间的盒子（当作桌子）

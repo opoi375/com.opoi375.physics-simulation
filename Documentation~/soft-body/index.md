@@ -110,13 +110,43 @@ F_i = -( k_v · (V - V₀) + c_v · dV/dt ) · ∇_i V
 
 - `springStiffness` 是牛顿每米量级的真实弹簧系数（不是布料那套 PBD 比值）。默认 1200 很硬，
   静态挂 0.8 kg 的物体只沉 6 mm——**想看出"软"要往下调**，演示用的果冻是 130。
-- 硬弹簧 + 显式积分会炸。三道保险：`substeps`（默认 4）、`maxDeltaTime`（默认 1/15 秒）、
+- 硬弹簧 + 显式积分会炸。四道保险：`substeps`（默认 4）、`maxDeltaTime`（默认 1/15 秒）、
   `maxStretchRatio`（超限后做 8 趟 Gauss-Seidel 位置投影）与 `maxSpeed`（默认 40 米/秒的速度封顶）。
   `maxSpeed` 是最后一道防线，正常参数下永远碰不到；碰上了说明刚度给得太离谱。
 - `volumeStiffness` 提高会让它更像充气的球，但也更容易在剧烈碰撞式形变里抖。默认 4000 配
   `volumeDamping = 20` 是个稳的组合。
 - `damping` 是全局速度衰减（0.5 意味着每秒保留约 60%）。想让它多晃几下去掉 `damping`，
   而不是去掉弯曲弹簧。
+
+### 5.1 参数生效方式（v1.6.0 起的契约）
+
+| 生效方式 | 字段 | 为什么 |
+| --- | --- | --- |
+| 立即生效（`[RuntimeTunable]`） | `gravity`、`damping`、`maxSpeed`、`volumeStiffness`、`volumeDamping`、`substeps`、`maxDeltaTime`、`enableStretchLimit`、`maxStretchRatio`、`collisionThickness` | 每步直接读；`gravity` / `damping` 曾经在 `Build()` 时被拷进内层系统，改了就静默无效，现在每步同步 |
+| 需要 `Rebuild()`（`[RequiresRebuild]`） | `mass`、`weldTolerance`、`springStiffness`、`springDamping`、`bendStiffness`、`bendDamping` | `Spring.stiffness` 是 `readonly`，Build 时烘进弹簧；`bendStiffness = 0` 时根本不生成弯曲弹簧 |
+
+### 5.2 钉住的质点完全不参与积分
+
+`Pin()` / `SetPinned()` 把质点标成不可动之后，它**不参与积分**：速度归零、位置一步不动。
+旧实现只把加速度归零（`force * inverseMass`），然后照样 `position += velocity * dt` —— 带着 1 m/s 的钉住处
+**十步漂了 0.1667 m**。顺带把 `SoftBodySimulation` 里"求解器每步把钉住质点的速度清零"那句注释变成了事实。
+
+### 5.3 限幅：两端都钉死的边不再空转
+
+`ClampStretch` 遇到一条两端都钉死、又超过 `maxStretchRatio` 的边，现在会直接跳过并计入 `IrreparableStretchEdges`。
+旧实现在 `a.pinned && b.pinned` 早退**之前**就把 `clean = false` 写下去了，于是每个子步白跑满 8 趟、什么也没改，也不告诉你
+—— 结果就是"拉伸比一直超限，却找不到可调的旋钮"。
+
+### 5.4 刚硬配方实测（都是量出来的）
+
+0.6 m 方块落地板，跑 420 步，取质心高度：
+
+| `volumeStiffness` | 细分 6 的质心高度 | 细分 3 的质心高度 |
+| --- | --- | --- |
+| 4000（默认） | 0.02 m | 0.11 m |
+| 40000 | 0.16 m | 0.30 m |
+
+刚度上去必须**同时加 `substeps`**：显式积分下刚度高而子步不够，结果不是"更硬"，而是直接发散到 NaN。
 
 ## 6. 性能实测（托管求解器，无 Burst）
 
@@ -169,6 +199,9 @@ SoftBodyJelly：钉住 0 | 碰撞代理 1 个
 
 最低质点高出地面正好等于 `collisionThickness`。完整契约、四种几何的脱出方向与开销见 [碰撞代理](/collision/)。
 
+v1.6.0 又多了一条**体与体**的通道：把软体拖进 `ParticleInteractionGroup` 就能和另一个软体 / 布料 / 质点弹簧互推。
+接触几何是**质点球云**，判定距离 = 对方半径 + skin，所以网格太稀会漏接触，等重的两个体也堆不住 —— 这些限制都有实测数字，见[多体互碰](/interaction/)。
+
 ## 7. 编辑器工具
 
 `Tools ▸ Physics Simulation ▸ Soft Body`：
@@ -192,4 +225,4 @@ SoftBodyJelly：钉住 0 | 碰撞代理 1 个
 
 ## 9. 下一步
 
-- v1.6.0 会把求解器搬进 Jobs + Burst（可选程序集），这份基准就是对照基线；v1.3.0 做的是碰撞、v1.4.0 是模型审计、v1.5.0 是流体，都没动性能。
+- `Jobs + Burst` 可选程序集仍在计划中（未排期），这份基准就是它的对照基线；v1.3.0 做的是碰撞、v1.4.0 是模型审计、v1.5.0 是流体、v1.6.0 是多体互碰，都没动性能。

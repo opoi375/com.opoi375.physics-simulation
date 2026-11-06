@@ -28,7 +28,7 @@ namespace PhysicsSimulation
     /// </summary>
     [AddComponentMenu("Physics Simulation/Cloth Simulation")]
     [DisallowMultipleComponent]
-    public sealed class ClothBehaviour : MonoBehaviour
+    public sealed class ClothBehaviour : MonoBehaviour, IParticleBody
     {
         [Tooltip("布料模拟参数（网格尺寸、重力、三类约束硬度、子步与迭代）")]
         public ClothParameters parameters = new ClothParameters();
@@ -69,6 +69,10 @@ namespace PhysicsSimulation
         [Tooltip("在 Editor 里选中本物体时画出结构边线框（只影响 Scene View）")]
         public bool drawGizmoWireframe = true;
 
+        [Tooltip("加入这个互碰组后，同组的体（软体 / 布料 / 质点弹簧，类型不限）之间会互相挤开。\n"
+                 + "留空 = 完全不参与互碰，行为与之前版本逐位一致。")]
+        public ParticleInteractionGroup interactionGroup;
+
         ClothSimulation _system;
         bool _collidersSynced;        // Collider 列表同步一次标记，重建时重置
         MeshFilter _filter;
@@ -96,9 +100,10 @@ namespace PhysicsSimulation
 
         void OnDestroy()
         {
+            if (interactionGroup != null) interactionGroup.Remove(this);
             if (_ownsMesh && _mesh != null)
             {
-                Destroy(_mesh);
+                RuntimeAssets.Dispose(_mesh);
                 _mesh = null;
             }
         }
@@ -124,6 +129,10 @@ namespace PhysicsSimulation
             }
 
             if (generateMesh) BuildMesh();
+
+            // Rebuild 会 new 一个 ClothSimulation，连带换掉整个碰撞集合：
+            // 互碰代理必须重新挂回去，否则就是“编辑器里看着接上了，跑起来一点不碰”。
+            if (interactionGroup != null) interactionGroup.Reattach(this);
         }
 
         /// <summary>手动推进一个时间步（不管 autoSimulate 是什么）。<paramref name="dt"/> 由内部钳制与分子步。</summary>
@@ -137,18 +146,95 @@ namespace PhysicsSimulation
             if (windAcceleration != Vector3.zero) _system.AddWindImpulse(windAcceleration, dt);
 
             _system.Step(dt);                       // 非法 dt 由系统报错，不吞异常（吞了就只能靠猜了）
+            _cloudVersion++;                        // 质点动了：让别人的球云索引知道该重建
             WritePositions();
+        }
+
+        // ------------------------------------------------------------------
+        // 互碰（IParticleBody）：布料也是一朵质点球云，与软体走同一套代理，没有任何类型分支。
+        // 版本号而不是帧号当刷新守卫：布料走 Update、软体走 FixedUpdate，而 EditMode 测试里
+        // Time.frameCount 不动，用帧号会把第二次 Step 变成空操作。
+        // ------------------------------------------------------------------
+        /// <summary>
+        /// 互碰球半径 = 网格间距 × 这个系数，与软体同一个口径、同一个默认值。
+        /// 实测标定（240 步零载荷，两个 0.6 m 软体，质点间距不同）：半径 0.114→漂移 2.94 m，
+        /// 0.085→1.96 m，0.068→1.55 m，0.057→1.36 m——**漂移跟着半径走，半径减半漂移几乎减半**。
+        /// 因为半径决定"两个体的表面至少隔多远才算接触"，硬摆得更近就必须把壳掰凹那么多，
+        /// 凹进去的量存成弹簧能，回弹把整个体甩走。这是球云接触的固有代价，不是算法缺陷
+        /// （质点弹簧的单个质点 peakOut = 0.000 已经排除了"修正量转成速度"这条路径）。
+        /// 所以：0.5 = 半个间距 = "相邻两球刚好相切"，是两体表面**真的碰上**才算接触的那个点；
+        /// 调大 → 隔着距离就互推、并且弹得更狠；调小 → 缝隙会漏（质点之间露出洞）。
+        /// 想要两个体安静地堆在一起，唯一有效的办法是**加密网格**（间距变小，半径跟着变小）。
+        /// </summary>
+        [Tooltip("互碰球半径 = 网格间距 × 此系数。0.5 = 两体表面真碰上才算接触。与软体同口径。")]
+        public float cloudRadiusFactor = 0.5f;
+
+        int _cloudVersion = 1;
+        Matrix4x4 _cloudMatrix = Matrix4x4.zero;
+        Vector3[] _cloudWorld = new Vector3[0];
+
+        /// <summary>参与互碰的质点数（含钉住的）。</summary>
+        public int CloudParticleCount { get { return _system == null ? 0 : _system.ParticleCount; } }
+
+        /// <summary>球半径 = 网格间距 × <see cref="cloudRadiusFactor"/>，下限 0（半径 0 表示几乎不互碰，仍然良定义）。</summary>
+        public float CloudRadius
+        {
+            get
+            {
+                float spacing = parameters == null ? 0f : parameters.spacing;
+                if (spacing <= 0f) return 0.05f;
+                float factor = cloudRadiusFactor > 0f ? cloudRadiusFactor : 0f;
+                return spacing * factor;
+            }
+        }
+
+        /// <summary>质点或变换每变一次自增；读取幂等，但会顺手自检变换矩阵。</summary>
+        public int CloudVersion
+        {
+            get
+            {
+                Matrix4x4 now = transform.localToWorldMatrix;
+                if (now != _cloudMatrix) { _cloudMatrix = now; _cloudVersion++; }
+                return _cloudVersion;
+            }
+        }
+
+        /// <summary>当前世界坐标下的质点位置（前 <see cref="CloudParticleCount"/> 个有效）。</summary>
+        public Vector3[] CloudWorldPositions()
+        {
+            int count = _system == null ? 0 : _system.ParticleCount;
+            if (_cloudWorld.Length < count) _cloudWorld = new Vector3[Mathf.Max(count, 16)];
+            Matrix4x4 toWorld = transform.localToWorldMatrix;
+            _cloudMatrix = toWorld;
+            for (int i = 0; i < count; i++) _cloudWorld[i] = toWorld.MultiplyPoint(_system.GetPosition(i));
+            return _cloudWorld;
+        }
+
+        /// <summary>本体的碰撞集合，互碰组会往里挂别人的球云。</summary>
+        public CollisionSet ParticleCollisions { get { return _system == null ? null : _system.Collisions; } }
+
+        /// <summary>Inspector 上那个字段与 <c>group.Add(this)</c> 的回写共用同一个入口。</summary>
+        ParticleInteractionGroup IParticleBody.CloudGroup
+        {
+            get { return interactionGroup; }
+            set { interactionGroup = value; }
         }
 
         /// <summary>
         /// 把组件变换与 Collider 列表同步给求解器。
-        /// 没开 collideWithSceneColliders 时注入单位矩阵，于是逐位等价于 v1.1.0/v1.2.0 的布料。
+        /// 既没开 Collider 桥接、又不在互碰组里时注入单位矩阵，于是逐位等价于 v1.1.0/v1.2.0 的布料。
+        /// 但**互碰组也必须注入**：球云存的是世界坐标、登记的也是 World 空间，
+        /// 这里偷懒留单位矩阵就会把布料的局部坐标当成世界坐标用，互碰当场错位。
         /// 旧的 <c>obstacles</c>（模拟空间球）与这批世界空间代理可以同时生效，互不干扰。
         /// </summary>
         void SyncSceneColliders()
         {
             if (_system == null) return;
-            if (!collideWithSceneColliders)
+
+            // 惰性入组：Inspector 里拖了组但没人调 Add 是最常见的用法
+            if (interactionGroup != null && !interactionGroup.Contains(this)) interactionGroup.Add(this);
+
+            if (!collideWithSceneColliders && interactionGroup == null)
             {
                 _system.SetSimulationToWorld(Matrix4x4.identity);
                 return;

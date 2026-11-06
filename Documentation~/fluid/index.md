@@ -4,10 +4,16 @@
 
 实现的是 **PBF（Position Based Fluids，Macklin et al. 2016）**：和布料同源，都是**位置约束模型** ——
 每个子步先预测位置，再把"密度等于静止密度"这条约束投影回去，最后用位置差反推速度。
-所以它没有显式压力项、没有刚度系数可调，`restDensity` 是物理量而不是旋钮；稳定性靠**子步数 + 投影迭代 + 两道保险丝**。
+所以它没有显式压力项、没有刚度系数可调，`restDensity` 是物理量而不是旋钮；稳定性靠**子步数 + 投影迭代 + 四道保险丝**。
 
 > 核心求解器 `FluidSimulation` 是纯 C# + `UnityEngine.Vector3`，不依赖 Unity 物理、不依赖 URP/HDRP、不依赖 Job/Burst，
 > 可以脱离 GameObject 在 EditMode 里直接跑，**同一份参数在任意机器上逐位一致**。
+
+::: tip 空间约定：模拟在组件**局部空间**
+`FluidBehaviour` 交给求解器的是**组件局部坐标**，渲染时才乘 `localToWorld` 变到世界（组件自己的注释就是这么写的）。
+v1.5.0 的发布说明写成"世界空间"，那是个错误 —— 照着它去推速度回算会多叠一个 g。
+球体积以**组件自身原点**为球心：早先用了 `transform.localPosition`，组件在 `(3,0,0)` 时水会生成在世界 `(6,0,0)`。
+:::
 
 ## 1. 五分钟上手
 
@@ -48,11 +54,12 @@ public class WaterBucket : MonoBehaviour
 | 字段 | 作用 |
 | --- | --- |
 | `parameters` | 见[参数参考](/reference/fluid-parameters) |
-| `volumeShape` | `Box / DamBreak / Sphere` 三种初始点阵 |
+| `volumeShape` | `Box / DamBreak / Sphere` 三种初始点阵（球体积以组件原点为球心） |
 | `volumeSize` / `volumeRadius` | 点阵尺寸（Box/DamBreak 用 size，Sphere 用 radius） |
 | `collideWithSceneColliders` + `sceneColliders` | 把场景 `Collider` 桥接成碰撞代理 |
 | `updateCollidersEveryStep` | 代理每帧重采样（移动的平台要开，静态水箱不必） |
 | `autoSimulate` | 关掉后由外部调 `Step(dt)`，做定步长/回放 |
+| `enableBoxContainer` / `containerCenter` / `containerHalfSize` | 内侧长方体容器：水的边界。**必须走这三个字段** —— 手动 `Collisions.Add` 的代理会在 `Rebuild()` 之后丢 |
 | `renderParticles` | 用 `Graphics.DrawMeshInstanced` 画粒子（不生成 Mesh，不吃 SkinnedMesh 预算） |
 | `autoParticleSize` / `particleRenderScale` | 粒子方块边长：自动取 1.6×间距，或手填 |
 | `particleColor` / `emissionStrength` | 颜色与自发光（材质走管线默认材质，见 §6） |
@@ -60,10 +67,13 @@ public class WaterBucket : MonoBehaviour
 常用方法/属性：`Rebuild()`、`Step(dt)`、`ResetToInitialLayout()`、`Simulation`、`IsBuilt`、`LastBuildError`、
 `ParticlePositions`、`EffectiveParticleRadius`、`RenderBatchCount(n, max)`（`DrawMeshInstanced` 单次上限 1023，超了自动分批）。
 
+`Rebuild()` 与 `ResetToInitialLayout()` 共用同一个 `WireSimulation()`：容器代理与场景 Collider 桥都会重新挂到新求解器上。
+只修了 `Rebuild()` 而漏掉 `Reset()` 的版本里，`ResetToInitialLayout()` 之后代理数归零、一箱水自由落体到 `y = −92`（动能 16904）。
+
 ## 3. 一个子步里发生了什么
 
 ```
-dt ──钳到 maxDeltaTime──> 切成 substeps 份，每份：
+dt ──钳到 maxDeltaTime──> 切成 EffectiveSubsteps 份（运行期下限 1），每份：
   1. 预测    x̂ = x + v·h + g·h²            （v 先按 vorticity/xsph 之前的值积分）
   2. 邻居    均匀网格哈希 → CSR（starts/indices），cell = h
   3. 碰撞    解析代理把 x̂ 推出体外（记录接触法线）
@@ -81,6 +91,18 @@ dt ──钳到 maxDeltaTime──> 切成 substeps 份，每份：
 - 水"黏"、表面结膜 ⇒ 确认 `clampTensileLambda = true`（关掉它会互相吸引，见 §5）；
 - 想软一点（泡沫/泥浆感） ⇒ 提 `complianceAlpha`，它是**松弛因子**：λ 乘 `1/(1+α)`；
 - 粒子数爆炸 ⇒ `particleSpacing` 是三次方关系，`0.05 → 0.06` 少掉 42% 的粒子。
+
+求解器里**实际有**的只有这几件：密度约束投影、`clampTensileLambda` 拉力钳制、`complianceAlpha` 柔度项、XSPH 黏度、涡度约束。
+没有表面张力、没有额外的密度修正项 —— 调参时不必去找不存在的旋钮。
+
+### 3.1 哪些参数改了就生效，哪些必须重建
+
+| 生效方式 | 字段 | 说明 |
+| --- | --- | --- |
+| 立即生效（`[RuntimeTunable]`） | `kernelRadius`、`restDensity`、`substeps`、`solverIterations`、`complianceAlpha`、`clampTensileLambda`、`gravity`、`xsphViscosity`、`vorticityEpsilon`、`collisionThickness`、`maxDeltaTime`、`maxSpeed` | `kernelRadius` 实时生效：邻居表每步重建一次，改 h 不需要重建粒子 |
+| 必须 `Rebuild()`（`[RequiresRebuild]`） | `particleSpacing`、`maxParticles` | 初始体积采样与邻居格尺寸都按间距定，粒子集在构建时就生成了 |
+
+每个参数字段必须**恰好**标一个标记：两个都标或都不标 = 未分类，反射测试直接红。这条规则的来由见[概述 / 设计原则](/guide/overview)。
 
 ## 4. 核函数与归一化（数值细节都在这儿）
 
@@ -124,6 +146,13 @@ PBF 的投影在**病态构型**下会给出荒谬的位移（邻居太少时密
    十几米每秒的速度，一步就跨过整块薄板 —— 这是演示水箱"活板门漏水"的另一半原因
    （前一半见 §7 的顶盖 warning）。`Validate()` 拒绝负数；置 0 表示不限制。
    用例：`DemoTank_SingleStepMaxExcursionFitsInsideEveryProxySkin` 把"单步最大位移 < 最薄板到中线的余量"钉死。
+
+::: warning 运行期把 `substeps` / `solverIterations` 设成 0：现在钳到 1，旧实现会静默冻结
+`Validate()` 只在构造 / `Rebuild()` 时跑，而 Inspector 暴露的是同一个参数实例，所以运行期照样可能被改成 0。
+`EffectiveSubsteps` / `EffectiveSolverIterations` 把它们钳到 ≥1，与另外三个求解器的语义一致。
+旧实现没有这道下限：`subStep = dt / 0 = +∞`，循环一次都不进，水**十步位移 0.0000**、无异常、无 NaN ——
+画面静止，但没有任何日志能告诉你为什么。
+:::
 
 ::: warning 秒级 `Time.deltaTime` 会把整池水甩到一千米外
 进 Play 的第一帧、卡帧、切后台再回来，Unity 可能给出**秒级**的 `deltaTime`。PBF 的子步长直接进重力积分和投影，
@@ -267,7 +296,7 @@ PBF 的投影在**病态构型**下会给出荒谬的位移（邻居太少时密
   别指望托管求解器一帧 16.7 ms 走完。
 - 上表只量 `Step()`，不含 `DrawMeshInstanced` 的绘制成本。
 
-`v1.6.0` 的 Jobs + Burst 可选程序集要把这些数字压一个数量级（布料/软体的 Burst 版同批处理）。
+`Jobs + Burst` 可选程序集仍在计划中（未排期），目标是把这些数字压一个数量级（布料/软体的 Burst 版同批处理）。
 
 ## 9. 已知边界
 

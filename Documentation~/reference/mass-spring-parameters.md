@@ -16,6 +16,10 @@
 | `maxDeltaTime` | float | `1/15` | s | 单步 dt 上限（钳制） |
 | `collisionThickness` | float | `0.01` | m | **（v1.3.0）** 质点与碰撞代理之间的皮肤厚度；世界空间代理会按缩放折算。见[碰撞代理](/collision/) |
 
+这四项（`gravity` / `globalDamping` / `substeps` / `maxDeltaTime`）在 `Step()` 开头**每步同步**进 `MassSpringSystem`，
+播放中改 Inspector 立即生效。v1.6.0 之前它们在 `Rebuild()` 时被拷进去就再也不读，而播放模式下 `OnValidate` 又跳过重建，
+于是改了完全没反应、也不报错。
+
 ### 质点列表 `particles`
 
 | 字段 | 类型 | 默认 | 说明 |
@@ -54,6 +58,13 @@
 | 弹簧被压缩 | 向蓝过渡 |
 | 地面参考线 | 半透明灰 |
 
+### 体与体互碰（v1.6.0）
+
+| 字段 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `interactionGroup` | `ParticleInteractionGroup` | `null` | 所在互碰组；与 `group.Add(this)` 走同一个入口 |
+| `cloudRadiusFactor` | float | `1.0` | 互碰球半径 = `particleRadiusBase × 此系数`。质点弹簧这里是**绝对半径**口径，所以默认 1.0（软体 / 布料是 0.5） |
+
 ### 运行时只读属性
 
 | 成员 | 类型 | 说明 |
@@ -91,7 +102,7 @@
 | `Springs` | `IReadOnlyList<Spring>` | 弹簧只读视图（元素不可变） |
 | `AddParticle` | `int AddParticle(Vector3 position, float mass, bool pinned = false, float damping = 0f)` | 返回索引；质量非有限正数 / 位置含 NaN·Inf / 阻尼为负 → `ArgumentOutOfRangeException` |
 | `AddSpring` | `int AddSpring(int a, int b, float restLength, float stiffness, float damping)` | 返回索引；`restLength <= 0` 自动取当前距离；索引越界 / `a == b` / 参数非法 → `ArgumentOutOfRangeException` |
-| `Pin` / `Unpin` | `void Pin(int index)` | 钉死 / 解开（`inverseMass` 在 `0` 与 `1/mass` 间切换）；越界抛异常 |
+| `Pin` / `Unpin` | `void Pin(int index)` | 钉死 / 解开（`inverseMass` 在 `0` 与 `1/mass` 间切换，并**清零速度**）；越界抛异常 |
 | `ApplyForces` | `void ApplyForces()` | 力累积器清零 → 重力 → 弹簧内力 |
 | `Step` | `void Step(float deltaTime)` | 钳制 dt → 分子步 → 每子步 `ApplyForces()` + 积分；`dt <= 0` 或 `NaN`/`Inf` → `ArgumentOutOfRangeException` |
 | `ResetToInitial` | `void ResetToInitial()` | 位置/速度/固定状态/粒子阻尼复位，力累积器清零 |

@@ -1,6 +1,6 @@
 # 编辑器工具
 
-菜单都在 **Tools → Physics Simulation** 下（质点弹簧 100~103，布料 110~112），与卡通渲染包同一套菜单风格。
+菜单都在 **Tools → Physics Simulation** 下（质点弹簧 100~103，布料 110~112，软体 120~124，流体 130~132，多体互碰 130~132），与卡通渲染包同一套菜单风格。
 
 | 菜单 | 优先级 | 做什么 | 会写盘吗 |
 | --- | --- | --- | --- |
@@ -112,7 +112,7 @@
 
 | 菜单项 | 优先级 | 做什么 | 写盘 |
 | --- | --- | --- | --- |
-| Create Fluid Demo Scene | 130 | 新建场景 → **六面密封水箱**（底板 + 四面墙 + 顶盖，带 `BoxCollider`）+ 左侧水柱（溃坝）+ 相机灯光，水体组件默认配成 **`Surface` 水面模式** → 存成 `Assets/Scenes/FluidDemo.unity` | ✅ 经 `DemoSceneSave`，未命名场景先中止 |
+| Create Fluid Demo Scene | 130 | 新建场景 → 六面密封水箱（底板 + 四面墙 + 顶盖，**只画不碰**，不挂 Collider）+ 1 个内侧盒子容器代理 + 左侧水柱（溃坝）+ 相机灯光，水体组件默认配成 **`Surface` 水面模式** → 存成 `Assets/Scenes/FluidDemo.unity` | ✅ 经 `DemoSceneSave`，未命名场景先中止 |
 | Build Fluid In Current Scene | 131 | 只在当前场景加水箱与水柱，不动相机灯光 | ❌ 不写盘，只标脏 |
 | Dump State | 132 | 打印每个 `FluidBehaviour` 的质点数 / 平滑长度 / 平均邻居数 / 质量 / 密度比 / 最大速度 / 包围盒 / 是否被预算截断 / 碰撞代理个数 | ❌ |
 
@@ -123,6 +123,25 @@
 - **水池要有深度、相机要俯看**（`DemoConfig_PoolIsDeepEnoughAndCameraLooksIntoTheTank`）。齐眼高度的水平相机会被前墙完全挡住——截图里那片"空的盒子"就是这件事；而水池浅于四行质点时水摊成一层，从侧面看等于没有。
 
 这些约束连同数值都写在 `FluidDemoTools` 的常量里，不在场景里手调，所以每次跑菜单都会重建到同一个几何。
+
+::: warning 板子只负责画，边界交给容器
+六块板**不挂任何 Collider**，水能被兜住靠的是 `FluidBehaviour` 序列化字段上的 1 个 `BoxContainerProxy`
+（Dump State 里 `碰撞代理 1` 就是它）。这正是 v1.5.0 末尾的结论：每块板各自按"最浅轴"裁决，接缝与薄板中线永远是漏点；
+逐轴钉回内壁才没有"往哪一面逃"的问题。挡镜头的两面墙与顶盖连 `Renderer` 都不建。
+:::
+
+## Interaction / 多体互碰工具（v1.6.0）
+
+菜单在 **Tools → Physics Simulation → Interaction** 下，优先级 130~132。
+
+| 菜单项 | 优先级 | 做什么 | 写盘 |
+| --- | --- | --- | --- |
+| Create Interaction Demo Scene | 130 | 新建场景 → 两个果冻 + 一条围巾放进同一个 `ParticleInteractionGroup`，加地面与相机灯光 → 存成 `Assets/Scenes/ParticleInteractionDemo.unity` | ✅ 经 `DemoSceneSave` |
+| Build In Current Scene | 131 | 只在当前场景搭这组互碰体 | ❌ 不写盘，只标脏 |
+| Dump State | 132 | 打印组成员数、每个体的质点数与球半径，以及前两个体之间的最近球心距 / 半径和 / 穿透深度 | ❌ |
+
+互碰是不是真的生效，靠数字而不是截图：演示起手面间隙 0.06 m，仍在判定距离之内，所以接触照样发生；
+只看画面很容易把"没碰上"和"碰了但很弱"搞混。几何与阈值的实测见[多体互碰](/interaction/)。
 
 ## 运行测试
 
@@ -137,7 +156,7 @@
 | `MassSpringDemoToolsTests.cs` | 5 | 演示链条结构、k 递减、原长自动、子步够稳、可视化绑定完整 |
 | `FluidKernelTests.cs` | 9 | poly6 / spiky 梯度 / 粘性拉普拉斯的**解析积分与边界**（∫poly6=W(r=0)、∫spiky=W、∇spiky=0 在边界、负半径、归一化系数） |
 | `FluidNeighborSearchTests.cs` | 8 | 均匀哈希 + CSR 表：自匹配排除、半径语义、逐位确定性、**重建后计数表必须清零**（这条测出了粘性的隐藏 bug）、跨格邻居不漏 |
-| `FluidVolumeTests.cs` | 6 | 长方体 / 球 / 柱的采样间距、数量对账、预算截断上报、角点不重复 |
+| `FluidVolumeTests.cs` | 6 | 长方体 / 球 / 溃坝的采样间距、数量对账、预算截断上报、角点不重复 |
 | `FluidSimulationTests.cs` | 24 | 静止方块密度≈ρ0、受压变密、溃坝向前推、XSPH 不增加动能、涡度不无中生有、拉力钳制、**护栏只兜底不背锅**、`maxDeltaTime` 钳制、**首帧秒级 dt 不把水甩出箱外**、确定性、参数校验 |
 | `FluidSurfaceTests.cs` | 19 | 标量场 splat（峰值/单调衰减/空输入/逐位确定）、等值面几何（**闭合：边界边必须为 0**、顶点不出采样范围、法线朝外、两团水不许搭桥、预算自动放大体素、低阈值必须包住高阈值）、`FluidBehaviour` 三种渲染模式与节流、演示水面常量与六面水箱 |
 | `FluidTankSealTests.cs` | 2 | 300 步内没有任何粒子穿出六面水箱（行为）；单步最大位移（平流 + 约束轨道）必须小于最薄一块板到中线的余量（结构） |
@@ -154,7 +173,13 @@
 | `SoftBodyMeshAuditTests.cs` | 22 | 审计契约：判定分级（含 `InvertedWinding` / `DegenerateVolume` 两条漏报回归）、note 列、表格列数不被异常消息撕坏 |
 | `SoftBodyModelAuditToolsTests.cs` | 15 | 网格抽取、预算线筛选、Markdown 报告与分档合计对账、推荐参数缩放、两轮对照 |
 
-合计 **270** 个 EditMode 测试：质点弹簧 30、布料 38、软体 36、**碰撞 38**、模型审计 22 + 扫描工具 15、**流体 89**（9 核函数 + 8 邻居搜索 + 6 体积形状 + 24 求解器 + 19 水面 + 2 密封 + **12 Unity 层** + 9 演示工具）、存盘口子 2。
+合计 **344** 个 EditMode 测试，全过。
 
-::: warning 这张表的数字是**逐文件数出来的**
-上一版写的是 240，并把碰撞记成 33、软体演示记成 7 —— 那两条与测试文件里的实际条数不符（32 与 8）。本版把每一行按 `[Test] + [TestCase]` 静态数过一遍，再与 Test Runner 的运行数对账；两边不一致时以**跑出来的数**为准。（v1.5.0 收尾时又给碰撞代理加了 6 条 `BoxContainerProxy` 用例、给流体加了 2 条容器用例：碰撞 32 → **38**、流体 87 → **89**、合计 262 → **270**，静态逐条相加与 Runner 完全一致。）:::
+数法：按 `[Test] + [TestCase]` 在文件里逐条静态数，再与 Test Runner **逐类枚举**对账；两边不一致时以逐类枚举为准。
+**命名空间级过滤器会返回旧的一份子集（316）**，拿它当总数会少一截 —— v1.5.0 时就是在这里数错的。
+
+::: warning 这张表的数字是**逐文件**数出来的，总数以逐类枚举为准
+较早的版本把碰撞记成 33、软体演示记成 7 —— 那两条与测试文件里的实际条数不符（32 与 8），已按 `[Test] + [TestCase]` 逐条重数。
+v1.6.0 又多了 `ParticleInteractionTests` / `InelasticContactTests` / `ParameterActivityTests` / `ReviewRegressionTests` 四个文件（多体互碰、接触半径、参数生效契约与评审回归），
+包内合计 **344**。上表列的是各文件的**覆盖范围**，不是本版快照：加用例不会重写历史行。
+:::

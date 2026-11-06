@@ -55,6 +55,7 @@ public class Flag : MonoBehaviour
 | `obstacles` | 障碍列表；有 `SphereCollider` 就用它的半径（乘世界缩放），否则用 `obstacleRadiusFallback` |
 | `generateMesh` / `recalculateNormals` | 是否生成/更新网格与法线 |
 | `drawGizmoWireframe` | Scene 视图里画结构边线框与质点小圆 |
+| `interactionGroup` / `cloudRadiusFactor` | 多体互碰（v1.6.0）：加入哪个组、球半径 = `spacing × 系数`（默认 0.5 = 相邻两球相切）。接触判定距离是**对方半径 + skin**，不是 `r_A + r_B`，详见[多体互碰](/interaction/) |
 
 常用方法：`Rebuild()`（改完参数重建）、`Step(dt)`、`ResetToInitialLayout()`、`CaptureCurrentAsInitial()`（把当前姿态设为初始姿态）、
 `CollectStructuralEdges(...)`（拿结构边做调试绘制）、`System` / `IsBuilt` / `LastBuildError` / `Mesh`。
@@ -94,9 +95,20 @@ public class Flag : MonoBehaviour
 - 想省性能 ⇒ 降 `iterations` 到 1、关 `enableBend`、减小网格分辨率；
 - 极限参数下想保证不烂 ⇒ `maxStretchRatio` 是硬保险，多轮限幅扫描把过拉伸压回上限附近。
 
+### 4.1 哪些参数改了就生效，哪些必须重建
+
+| 生效方式 | 字段 | 说明 |
+| --- | --- | --- |
+| 立即生效（`[RuntimeTunable]`） | `gravity`、`damping`、`structuralStiffness`、`shearStiffness`、`bendStiffness`、`enableShear`、`enableBend`、`substeps`、`iterations`、`maxDeltaTime`、`maxStretchRatio`、`collisionThickness` | 播放中拖 Inspector 立刻有反应 |
+| 需要重建（`[RequiresRebuild]`） | `columns`、`rows`、`spacing`、`mass` | 网格与约束表在构造时按行列数分配；逆质量也只在构造时算好一份（`SetPinned` 复用它） |
+
+`mass` 从实时改成重建，是因为它曾在两个地方被读：构造函数烘 `1/mass`，`SetPinned` 又去读 `Parameters.mass`，
+同一块布就成了两种质量；而且 `mass = 0` 会写进 `+Infinity`，三步内全变 NaN。现在 `mass = 0` 不再产生 Infinity/NaN，但改了 `mass` 请 `Rebuild()`。
+
 ::: warning 拉伸限幅是 Gauss-Seidel 近似
-`ClampStretch()` 最多做 32 轮扫描，一轮的修正可能把另一条约束顶出去，所以它是**收敛式**保证而不是同时精确解。
+`ClampStretch()` 最多做 **16** 轮扫描（早期文档写的是 32，循环实际上是 16），一轮的修正可能把另一条约束顶出去，所以它是**收敛式**保证而不是同时精确解。
 碰撞推出发生在限幅之后，因此"质点一定在球外"是硬保证，而那一瞬间的拉伸可能短暂超过 `maxStretchRatio`。
+`ClothParameters.Validate()` 现在把 `substeps` / `iterations` / `maxDeltaTime` 也纳入校验（旧版三个都没查）；运行期还有一道兜底：`Step()` 把两个整数钳到 ≥1、`dt` 钳到 `maxDeltaTime`，所以手填 0 的代价是"只多跑一遍"，不是除零或静默冻结。
 :::
 
 ## 5. 性能实测（托管求解器，无 Burst）
@@ -114,7 +126,7 @@ public class Flag : MonoBehaviour
 真正的复杂度回归由 `Benchmark_ClothCostScalesNearLinearlyWithParticleCount` 用**比值**拦住：32×32（1024 质点）对
 64×64（4096 质点），质点与约束都是 4 倍，线性就该是 ~4 倍耗时，真退化成 O(n²) 会接近 16 倍（门槛 12）。负载对两档的影响
 近似相乘，比值把它约掉。
-`v1.6.0` 的 Jobs + Burst 可选程序集就是冲着把 64×64 压进一帧去的（v1.3.0 做了碰撞、v1.4.0 做了模型审计、v1.5.0 做了流体，性能一直排到最后）。
+`Jobs + Burst` 可选程序集仍在计划中（未排期），把 64×64 压进一帧是它的目标（v1.3.0 做了碰撞、v1.4.0 做了模型审计、v1.5.0 做了流体、v1.6.0 做了多体互碰，性能一直排到最后）。
 
 ## 6. 编辑器工具
 

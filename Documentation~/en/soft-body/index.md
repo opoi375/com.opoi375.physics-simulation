@@ -69,6 +69,11 @@ Same contract as `ClothBehaviour`:
 `pinMode` has four values: `None`, `TopVertices` / `BottomVertices` (take one height layer, tolerance
 `pinLayerThickness`), and `ExplicitIndices` (pin exact source-mesh vertex indices).
 
+A pinned particle is genuinely immovable since v1.6.0: its velocity is zeroed and the integrator skips it entirely.
+The old build only zeroed the *acceleration* and still ran `position += velocity·dt`, so a pinned point that carried a
+velocity kept drifting — measured 0.1667 m in 10 steps at 1 m/s. Pinned particles are also skipped by the collision
+pass, so a pinned corner behaves as a static obstacle instead of being shoved out of whatever touches it.
+
 ::: warning Perturb with `initialVelocity`, not by pushing particles
 A perturbation that only rewrites runtime particle positions (say, shearing them with `SetPositions`
 in the editor) is **lost the instant Play mode runs `Awake → Rebuild`** from the source mesh — the demo
@@ -113,18 +118,42 @@ shares the same explicit integrator and substepping as the structural springs �
 Open meshes (some edge used by exactly one triangle) have no meaningful volume: `IsClosed` is false,
 `Volume()` returns 0 and the volume force is skipped. You get a sloshing shell instead, which still works.
 
+### When the clamp cannot win: `IrreparableStretchEdges`
+
+`ClampStretch` runs up to 8 Gauss-Seidel passes. An edge that is over `maxStretchRatio` **and** pinned at both ends has
+no solution in position space, so it is now skipped *before* the pass is marked dirty and counted in
+`IrreparableStretchEdges`. Non-zero is not an error — a pinned shell can legitimately be stretched by an external push —
+but it is the only signal that the clamp is spinning without effect. Before v1.6.0 the early-out came after the
+`clean = false`, so every substep burned all 8 passes changing nothing and said nothing.
+
 ## 5. Parameter feel
 
 - `springStiffness` is a real spring constant in N/m (not the PBD ratio used by cloth). The default
   1200 is stiff — 0.8 kg hangs 6 mm lower — so **turn it down to see softness**. The demo jelly runs at 130.
-- Stiff springs plus explicit integration explode. Three safeguards: `substeps` (default 4),
+- Stiff springs plus explicit integration explode. Four safeguards: `substeps` (default 4),
   `maxDeltaTime` (default 1/15 s), `maxStretchRatio` (8 Gauss-Seidel position-projection passes once
   exceeded) and `maxSpeed` (default 40 m/s cap). `maxSpeed` is the last line of defence: if you ever
   hit it, your stiffness numbers are wrong.
 - Raising `volumeStiffness` makes it behave like an inflated ball, but also makes it twitch under violent
   deformation. 4000 with `volumeDamping = 20` is a stable pairing.
+- **Raising stiffness without raising `substeps` diverges to NaN** — explicit integration stability is bought
+  almost entirely there. Measured (0.6 m box jelly dropped onto a floor, 420 steps, centroid height):
+  `volumeStiffness` 4000 → 40000 lifts the body from 0.02 m to 0.16 m at 6 subdivisions and from 0.11 m to
+  0.30 m at 3.
 - `damping` is global velocity decay (0.5 keeps roughly 60% per second). To make it wobble longer, lower
   `damping` — don't delete the bend springs.
+
+### Live vs rebuild (v1.6.0)
+
+Every field now carries exactly one marker and a reflection test fails if a new field carries neither:
+
+| Live during Play | Needs `Rebuild()` |
+| --- | --- |
+| `gravity`, `damping`, `maxSpeed`, `volumeStiffness`, `volumeDamping`, `substeps`, `maxDeltaTime`, `enableStretchLimit`, `maxStretchRatio`, `collisionThickness` | `mass`, `weldTolerance`, `springStiffness`, `springDamping`, `bendStiffness`, `bendDamping` |
+
+The five rebuild-only mechanics knobs look arbitrary but are not: `Spring.stiffness` is `readonly` and baked in by
+`Build()`, and at `bendStiffness = 0` no bend spring is generated at all, so the topology itself depends on it. This
+is also why the class finally became `[Serializable]` — all of these were invisible in the Inspector before.
 
 ## 6. Measured performance (managed solver, no Burst)
 
@@ -175,6 +204,10 @@ soft.Rebuild();
   slides rather than sticks);
 - `MeshCollider` and `Terrain` are unsupported and **not** faked with a bounding box — so make the ground a Cube with a
   `BoxCollider`;
+- pinned particles are skipped by the resolve pass, so a pinned layer is a static obstacle rather than something a
+  collider can shove;
+- two *soft bodies* can push each other since v1.6.0, but only when both are registered in the same
+  `ParticleInteractionGroup` ([Particle interaction](/en/interaction/));
 - the switch defaults to `false`, and off is bit-identical to v1.2.0.
 
 Measured (`Dump State`, during Play):
@@ -212,4 +245,4 @@ See the [Editor Tools overview](/en/tools/).
 
 ## 9. What's next
 
-- v1.6.0 moves the solver into Jobs + Burst (optional assembly); this benchmark is the baseline to beat. v1.3.0 shipped collision, v1.4.0 the model audit and v1.5.0 the fluids; none touched performance.
+- The Jobs + Burst optional assembly is still planned and is **not** part of v1.6.0 (that release shipped particle interaction and the parameter contract); this benchmark is the baseline to beat. v1.3.0 shipped collision, v1.4.0 the model audit, v1.5.0 the fluids and v1.6.0 the interaction layer; none of them touched performance.

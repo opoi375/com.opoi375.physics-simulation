@@ -1,7 +1,19 @@
 # 流体参数参考
 
-`FluidParameters`（命名空间 `PhysicsSimulation`）。字段都能在 Inspector 里改，改完调 `FluidBehaviour.Rebuild()`。
+`FluidParameters`（命名空间 `PhysicsSimulation`）。字段都能在 Inspector 里改；**改完要不要重建见下面的"生效方式"**。
 构造 `FluidSimulation` 时自动 `Validate()`，非法值**立刻抛异常**（消息是中文的），不会悄悄给一个错的模拟。
+
+## 生效方式（v1.6.0 起的契约）
+
+每个参数字段必须**恰好**标一个 `[RuntimeTunable]` 或 `[RequiresRebuild("理由")]`；两个都标或都不标 = 未分类，反射测试直接红。
+
+| 生效方式 | 字段 |
+| --- | --- |
+| 立即生效（`[RuntimeTunable]`） | `kernelRadius`、`restDensity`、`substeps`、`solverIterations`、`complianceAlpha`、`clampTensileLambda`、`gravity`、`xsphViscosity`、`vorticityEpsilon`、`collisionThickness`、`maxDeltaTime`、`maxSpeed` |
+| 需要 `Rebuild()`（`[RequiresRebuild]`） | `particleSpacing`（初始体积采样与邻居格尺寸都按间距定）、`maxParticles`（只在 Build 时用来拒绝超预算的初始粒子集） |
+
+`kernelRadius` 是实时生效的：邻居表每个子步都重建，改 `h` 不需要重新生成粒子。
+求解器持有的是 Behaviour 的**同一个** `FluidParameters` 实例（`ReferenceEquals`），不存在"改了一份、求解器看另一份"。
 
 ## 分辨率三兄弟（互相牵制，改一个就要看另外两个）
 
@@ -20,13 +32,12 @@
 
 | 字段 | 默认 | 约束 | 说明 |
 | --- | --- | --- | --- |
-| `substeps` | 2 | `>= 1` | 一个 `Step(dt)` 切几个子步。**提它比提 `solverIterations` 更划算**（邻居表每子步重建一次，代价线性；迭代是每子步多扫一遍） |
-| `solverIterations` | 2 | `>= 1` | 每个子步内密度约束投影几轮。0 等于不解密度 |
+| `substeps` | 2 | `>= 1` | 一个 `Step(dt)` 切几个子步。**提它比提 `solverIterations` 更划算**（邻居表每子步重建一次，代价线性；迭代是每子步多扫一遍）。运行期由 `EffectiveSubsteps` 钳到 ≥1：旧实现对 `substeps = 0` 没有任何报错，循环一次都不进，水**十步位移 0.0000**（静默冻结） |
+| `solverIterations` | 2 | `>= 1` | 每个子步内密度约束投影几轮。0 等于不解密度；运行期由 `EffectiveSolverIterations` 钳到 ≥1 |
 | `complianceAlpha` | 0 | `>= 0` | **松弛因子**：λ 乘 `1/(1+α)`。`0` = 严格不可压；`0.1~1` 得到软/泡沫感。它不是论文里那个量纲合规度 |
 | `clampTensileLambda` | true | — | 拉力钳制：`λ > 0`（"太稀，把邻居吸过来"）置零。真实液体没有这个力；关掉会让稀疏粒子互相吸成团、自由水面结膜 |
 | `maxParticles` | 8192 | `>= 1` | 构建时粒子数超限**直接拒绝**（`LastBuildError` 给出实际数量），而不是让帧率崩了再查 |
 | `maxDeltaTime` | 1/30 | `>= 0`（`<= 0` = 不钳制） | 单步 dt 上限。见下面 warning —— 这是演示场景"水自己炸开"的真凶 |
-| `maxSpeed` | 0 | `>= 0`（`0` = 不限制） | **平流速度上限（CFL 式）**。位移护栏只兜约束修正，而平流位移 = 速度 × 子步长，原先没有上限：PBF 在稀疏/深穿透构型下能给出十几米每秒，一步跨过整块薄板。演示取 8 m/s；`Validate()` 拒绝负数 |
 | `maxSpeed` | 0 | `>= 0`（`0` = 不限制） | **平流速度上限（CFL 式）**。位移护栏只兜约束修正，而平流位移 = 速度 × 子步长，原先没有上限：PBF 在稀疏/深穿透构型下能给出十几米每秒，一步跨过整块薄板。演示取 8 m/s；`Validate()` 拒绝负数 |
 
 ::: warning `maxDeltaTime` 不是性能参数，是正确性参数
@@ -69,23 +80,6 @@
 
 演示水箱就是这么来的：六块板只负责画，`ApplyTankContainer` 把内空尺寸写进上面三个字段，
 `Dump State` 里 `碰撞代理 1` 就是它。
-
-## 水面渲染参数（挂在 `FluidBehaviour` 上，不在 `FluidParameters` 里）
-
-水面是**观感层**：它只读粒子位置，不参与密度约束，所以开不开它模拟结果逐位一致。
-
-| 字段 | 默认 | 说明 |
-| --- | --- | --- |
-| `renderMode` | `Particles` | `Particles` 一堆实例化小球（v1.5.0 原本的观感）/ `Surface` 连续等值面 / `Both` 两个都提交 |
-| `surfaceCellSize` | 0 | 等值面体素边长。**0 表示取 `particleSpacing`**；演示用 `0.75 × particleSpacing`（比间距小才不像积木） |
-| `surfaceIsoLevel` | 0 | 阈值。**0 表示用 `FluidSurface.DefaultIsoLevel = 0.5`**：场被归一化成"静止水体内部 ≈ 1"，0.5 就是水面 |
-| `surfaceRefreshEveryNFrames` | 1 | 几帧重建一次水面。演示取 2 —— 一次重建的代价高于若干次约束投影，先节流再谈优化 |
-| `surfaceMaxCells` | 0 | 格子预算。**0 表示用 `FluidSurface.DefaultMaxCells = 262144`**；超了自动**放大体素**（`grid.Min` 与覆盖范围不动，只放大不缩小） |
-| `surfaceColor` | 半透明蓝 | 水面颜色（alpha 必须小于 1，否则看着像蓝色塑料；`FluidSurfaceMaterial.IsTranslucent` 就是断言这一条） |
-
-硬上限：单张水面网格最多 `FluidSurface.MaxMeshVertices = 65000` 个顶点（引擎的 `Mesh.triangles` 默认 ushort 索引 65535），超了**抛异常**而不是给你一张破面。
-
-只读观察口：`SurfaceMesh` / `SurfaceMaterial` / `SurfaceRevision`（重建了几次）/ `SurfaceTriangleCount` / `ParticleBatchCount`。
 
 ## 水面渲染参数（挂在 `FluidBehaviour` 上，不在 `FluidParameters` 里）
 

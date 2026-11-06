@@ -47,7 +47,7 @@ The order is what makes it *semi-implicit* (symplectic): velocity first, then po
 The explicit form `v -= c * v * dt` **flips the sign** of velocity once `c * dt > 1` and diverges past `c * dt > 2`. The divisor form `v / (1 + c*dt)` can only shrink velocity towards zero and never crosses it — immune to huge damping, large sub-steps, and typos like `1e5`.
 :::
 
-Pinned particles need no special case: with `inverseMass = 0` the acceleration is always zero, the velocity keeps its value (normally zero), and the position never moves.
+Pinned particles are special-cased in two places, and both are part of the contract: `Pin()` sets `inverseMass = 0` **and zeroes the velocity**, and the integrator early-returns for `inverseMass <= 0`. Zeroing only the acceleration is not enough — the old build still ran `position += velocity * dt`, so a pinned particle that carried a velocity kept drifting at constant speed (measured: 1 m/s pinned point, 0.1667 m in 10 steps; pinning an already-moving particle added another 0.50 m). Pinning means "immovable from here on", not "force-free".
 
 ## 2. The "correct answer" for free fall is not ½gt²
 
@@ -103,6 +103,12 @@ The test `BuildChain_SubstepsKeepHardestLinkStable` recomputes that number and r
 | `EffectiveSubsteps` | count | — | read-only: `substeps < 1` behaves as 1 |
 | `ClampDeltaTime(dt)` | s | — | read-only helper (`maxDeltaTime <= 0` disables clamping) |
 
+Since v1.6.0 the four integration fields (`gravity`, `globalDamping`, `substeps`, `maxDeltaTime`) are mirrored into the
+inner `MassSpringSystem` at the top of every `Step()`, so editing them during Play takes effect immediately. They used to
+be copied once at `Rebuild()` while `OnValidate` deliberately skips rebuilding in Play mode — the knobs did nothing and
+reported nothing. `MassSpringSystem` owning its own `Parameters` is the one place where the parameter object is *not* the
+behaviour's instance; that is why these four are mirrored and asserted field by field in a test.
+
 ### `Particle`
 
 | Field | Unit | Notes |
@@ -134,7 +140,7 @@ The test `BuildChain_SubstepsKeepHardestLinkStable` recomputes that number and r
 | Springs grow until NaN | explicit integration order, or `k·h²/m > 4` | raise `substeps`; check the integration order |
 | Velocity flips sign under heavy damping | damping written as `v -= c*v*dt` | use the divisor form `(v + a·dt) / (1 + c·dt)` (already done here) |
 | It swings faster on a fast machine | fed `Time.deltaTime` | feed `Time.fixedDeltaTime`, or drive fixed steps yourself |
-| A "pinned" point jitters | position written back each step while velocity kept accumulating | use `Pin()` (`inverseMass = 0`) so velocity never grows |
+| A "pinned" point jitters | position written back each step while velocity kept accumulating | use `Pin()` — it sets `inverseMass = 0` **and** clears the velocity, and the integrator skips the particle |
 | Explosion after a long pause | one huge dt | `maxDeltaTime` clamp (default 1/15) |
 | State-comparison tests that are always green | snapshots via `Vector3.ToString()`, which keeps 2 decimals | use the `"R"` round-trip format (as `CaptureState` does here) |
 | The system resets itself during play | rebuilding inside `OnValidate` | guard with `if (Application.isPlaying) return;` (done in `MassSpringBehaviour`) |
@@ -169,4 +175,5 @@ off not even the transform matrix is injected, so it stays bit-identical to v1.2
 ## 7. Next
 
 - Put it in a scene: [Quick Start](/en/guide/quickstart)
+- Push two bodies against each other: [Particle interaction](/en/interaction/)
 - Visualisation and diagnostics: [Editor tools](/en/tools/)

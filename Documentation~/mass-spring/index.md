@@ -49,7 +49,9 @@ x_new = x + v_new * dt                            # 用"新"速度推进位置
 显式写法 `v -= c * v * dt` 在 `c * dt > 1` 时把速度**反向**、`c * dt > 2` 时直接发散。除数形式 `v / (1 + c*dt)` 无论 `c*dt` 多大都只会把速度趋近 0，符号永远不变——大阻尼、大子步、手滑填了 1e5 的阻尼系数都炸不掉。测试 `Step_GlobalDamping_DecaysSpeedMonotonicallyWithoutSignFlip` 逐帧检查了"单调变小 + 不反号"。
 :::
 
-固定点不需要特判：`inverseMass = 0` 时加速度恒为 0，速度保持原值（通常就是 0），位置一步都不动。
+固定点现在是真的不动：`Pin()` 把 `inverseMass` 归零并**同时清零速度**，积分器对 `inverseMass <= 0` 直接早退。
+旧实现只把加速度归零（`force * inverseMass`），然后照样 `position += velocity * dt` —— 一个带着 1 m/s 的钉住处
+**十步就漂了 0.1667 m**，钉一个已经在动的质点还要再多漂 0.50 m。
 
 ## 2. 自由落体的"正确答案"不是 ½gt²
 
@@ -105,6 +107,12 @@ k * h² / m = 1600 * 4.34e-6 / 0.8 = 0.0087   ≪ 4   ✅
 | `EffectiveSubsteps` | 个 | — | 只读：`substeps < 1` 时按 1 处理 |
 | `ClampDeltaTime(dt)` | s | — | 只读：返回钳制后的时间跨度（`maxDeltaTime <= 0` 视为不钳制） |
 
+组件上的 `gravity` / `globalDamping` / `substeps` / `maxDeltaTime` **每步同步**进 `MassSpringSystem`，播放中改立即生效；
+旧版把这四个在 `Rebuild()` 时拷进去就再也不管，而 `OnValidate` 在播放模式又故意跳过重建，于是拖 Inspector 完全没反应也不报错。
+`MassSpringParameters` 的字段在本包内全部是 `[RuntimeTunable]`，没有需要重建的项。
+质点弹簧也是参数契约的唯一例外：`MassSpringSystem` 自带一份 `Parameters`（上面四项由 Behaviour 每步镜像进去），
+其余模块的求解器直接持有 Behaviour 的**同一个**参数实例（`ReferenceEquals`），两者都有测试断言。
+
 ### `Particle`
 
 | 字段 | 单位 | 说明 |
@@ -136,7 +144,7 @@ k * h² / m = 1600 * 4.34e-6 / 0.8 = 0.0087   ≪ 4   ✅
 | 弹簧越摆越大、最后 NaN | 用了显式欧拉（先位置后速度），或 `k·h²/m > 4` | 加 `substeps`；确认积分顺序 |
 | 大阻尼下速度反向、抖动 | 阻尼写成 `v -= c*v*dt` | 用除数形式 `(v + a·dt) / (1 + c·dt)`（本包已这么写） |
 | 帧率越高摆得越快 | 喂了 `Time.deltaTime` | 只喂 `Time.fixedDeltaTime`，或自己按定长步推进 |
-| 固定点"抖" | 每步手动把位置写回去，但速度已经攒起来了 | 用 `Pin()`（`inverseMass = 0`），让速度根本长不出来 |
+| 固定点"抖" | 每步手动把位置写回去，但速度已经攒起来了 | 用 `Pin()`（`inverseMass = 0` **且速度清零**），让速度根本长不出来 |
 | 暂停很久后回来系统炸开 | 一个巨大的 `dt` 灌进来 | `maxDeltaTime` 钳制（默认 1/15） |
 | 状态对比测试"永远绿" | 用 `Vector3.ToString()` 做快照，默认只有 2 位小数，微小变化看不见 | 用 `"R"` 往返格式（本包的 `CaptureState` 就这么干） |
 | 播放模式下系统被莫名复位 | 在 `OnValidate` 里重建系统 | 守卫 `if (Application.isPlaying) return;`（`MassSpringBehaviour` 已加） |
@@ -164,6 +172,13 @@ system.Step(Time.fixedDeltaTime);
 
 挂组件的话就是 `MassSpringBehaviour.collideWithSceneColliders` + `sceneColliders`，默认关；
 关掉时连变换矩阵都不注入，与 v1.2.0 逐位一致。契约细节见 [碰撞代理](/collision/)。
+
+## 6.6 体与体互碰（v1.6.0）
+
+质点弹簧和软体 / 布料一样实现了 `IParticleBody`：把三个 Behaviour 拖进同一个 `ParticleInteractionGroup`，
+它们就按**质点球云**互推。质点弹簧的 `cloudRadiusFactor` 默认是 **1.0**（不是软体 / 布料的 0.5）——
+因为它的半径基 `particleRadiusBase` 本来就是**绝对半径**（Gizmos 画多大就是多大），强行统一反而会把已发布外观改掉。
+接触判定距离是**对方半径 + skin**，不是 `r_A + r_B`，所以网格粗了会漏接触。详见[多体互碰](/interaction/)。
 
 ## 7. 下一步
 

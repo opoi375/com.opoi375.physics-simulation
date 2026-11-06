@@ -29,7 +29,7 @@ namespace PhysicsSimulation
     /// </summary>
     [RequireComponent(typeof(MeshFilter))]
     [AddComponentMenu("Physics Simulation/Soft Body")]
-    public sealed class SoftBodyBehaviour : MonoBehaviour
+    public sealed class SoftBodyBehaviour : MonoBehaviour, IParticleBody
     {
         [Tooltip("源网格：顶点会被焊接成质点，三角形边变成弹簧")]
         public Mesh sourceMesh;
@@ -73,6 +73,10 @@ namespace PhysicsSimulation
                  + "Play 时 Awake 会拿源网格重建模拟，扰动当场丢失，画面就成了静态。")]
         public Vector3 initialVelocity = Vector3.zero;
 
+        [Tooltip("加入这个互碰组后，同组的体之间会互相挤开（把质点当成一朵球云的近似）。\n"
+                 + "留空 = 完全不参与互碰，行为与之前版本逐位一致。默认关：不该因为升级就改变现有场景。")]
+        public ParticleInteractionGroup interactionGroup;
+
         SoftBodySimulation _simulation;
         bool _collidersSynced;        // Collider 列表负一次同步（重建时重置，免得拿着旧列表不放）
         Mesh _mesh;
@@ -104,10 +108,10 @@ namespace PhysicsSimulation
 
         void OnDestroy()
         {
+            if (interactionGroup != null) interactionGroup.Remove(this);
             if (_mesh != null)
             {
-                if (Application.isPlaying) Destroy(_mesh);
-                else DestroyImmediate(_mesh);
+                RuntimeAssets.Dispose(_mesh);
                 _mesh = null;
             }
         }
@@ -144,6 +148,10 @@ namespace PhysicsSimulation
                 SyncColliders();
                 EnsureInstanceMesh();
                 WriteBack();
+
+                // Rebuild 换掉了整个碰撞集合，手工挂的互碰代理会跟着没。
+                // 流体那边的容器代理已经踩过一次（编辑器里看着正常，一进 Play 代理数变 0）。
+                if (interactionGroup != null) interactionGroup.Reattach(this);
             }
             catch (Exception e)
             {
@@ -259,17 +267,112 @@ namespace PhysicsSimulation
             if (!IsBuilt) return;
             SyncColliders();
             _simulation.Step(deltaTime);
+            _cloudVersion++;                        // 质点动了：让别人的球云索引知道该重建
             WriteBack();
+        }
+
+        // ------------------------------------------------------------------
+        // 互碰（IParticleBody）：把本体的质点当成一朵**世界空间**的球云，供同组的其他体碰撞。
+        //
+        // 版本号是这套接线的命门。三个 Behaviour 的步进时机本来就不一致（软体与质点弹簧走
+        // FixedUpdate、布料走 Update），而 EditMode 测试里 Time.frameCount 根本不动 ——
+        // 用帧号当刷新守卫会把第二次 Step 悄悄变成空操作，测出来一片假绿。
+        // ------------------------------------------------------------------
+        const float CloudRadiusFallback = 0.05f;
+
+        // 上界系数：球半径不得超过静息尺度（cbrt(体积)）的这个比例，防止稀网格把体吹成气球。
+        const float CloudRadiusExtentFactor = 0.25f;
+        int _cloudVersion = 1;
+        Matrix4x4 _cloudMatrix = Matrix4x4.zero;
+        Vector3[] _cloudWorld = new Vector3[0];
+
+        /// <summary>
+        /// 互碰球半径 = 平均质点间距 × 这个系数。<see cref="cloudRadiusFactor"/> 是它的 Inspector 入口。
+        /// 实测标定（240 步零载荷，两个 0.6 m 软体，质点间距不同）：半径 0.114→漂移 2.94 m，
+        /// 0.085→1.96 m，0.068→1.55 m，0.057→1.36 m——**漂移跟着半径走，半径减半漂移几乎减半**。
+        /// 因为半径决定"两个体的表面至少隔多远才算接触"，硬摆得更近就必须把壳掰凹那么多，
+        /// 凹进去的量存成弹簧能，回弹把整个体甩走。这是球云接触的固有代价，不是算法缺陷
+        /// （质点弹簧的单个质点 peakOut = 0.000 已经排除了"修正量转成速度"这条路径）。
+        /// 所以：0.5 = 半个间距 = "相邻两球刚好相切"，是两体表面**真的碰上**才算接触的那个点；
+        /// 调大 → 隔着距离就互推、并且弹得更狠；调小 → 缝隙会漏（质点之间露出洞）。
+        /// 想要两个体安静地堆在一起，唯一有效的办法是**加密网格**（间距变小，半径跟着变小）。
+        /// </summary>
+        [Tooltip("互碰球半径 = 平均质点间距 × 此系数。0.5 = 两体表面真碰上才算接触。调大=隔空互推+弹得更狠，调小=表面漏缝。想安静堆叠请加密网格。")]
+        public float cloudRadiusFactor = 0.5f;
+
+        /// <summary>参与互碰的质点数（含钉住的：钉住的质点该推开别人，只是自己不动）。</summary>
+        public int CloudParticleCount { get { return _simulation == null ? 0 : _simulation.ParticleCount; } }
+
+        /// <summary>
+        /// 球半径 = min（平均结构弹簧静止长度 × <see cref="cloudRadiusFactor"/>, 静息尺度 × 0.25）。
+        /// 取间距的一半是“封得住粒子缝隙”的下限；而**上界同样重要**：
+        /// 网格太稀时间距会大于体本身，球就变成比自己还大的气球，两团气球互相卡死——
+        /// 从任何一个球里退出来都会立刻掉进另一个球，表现为“穿透深度一帧都不降”。
+        /// 上界用静息体积的立方根（不是当前包围盒），后者会形成反馈环：一分开半径就缩，一缩就漏。
+        /// 网格稀到两个约束冲突时，宁可漏也不吹气球：漏了还能调细分，胖了整个互碰就锁死了。
+        /// </summary>
+        public float CloudRadius
+        {
+            get
+            {
+                if (_simulation == null) return 0f;
+                float spacing = _simulation.AverageStructuralRestLength;
+                if (spacing <= 0f) return CloudRadiusFallback;
+                float restScale = Mathf.Max(0f, _simulation.RestVolume());
+                float extentCap = restScale > 0f ? Mathf.Pow(restScale, 1f / 3f) * CloudRadiusExtentFactor : float.MaxValue;
+                float factor = cloudRadiusFactor > 0f ? cloudRadiusFactor : 0f;
+                float r = Mathf.Min(spacing * factor, extentCap);
+                return r > 0f ? r : CloudRadiusFallback;
+            }
+        }
+
+        /// <summary>质点或变换每变一次自增。读取幂等，但会顺手自检变换矩阵（拖走组件而没步进也算变了）。</summary>
+        public int CloudVersion
+        {
+            get
+            {
+                Matrix4x4 now = transform.localToWorldMatrix;
+                if (now != _cloudMatrix) { _cloudMatrix = now; _cloudVersion++; }
+                return _cloudVersion;
+            }
+        }
+
+        /// <summary>当前世界坐标下的质点位置（前 <see cref="CloudParticleCount"/> 个有效）。缓冲区会被复用，调用方必须自己拷。</summary>
+        public Vector3[] CloudWorldPositions()
+        {
+            int count = _simulation == null ? 0 : _simulation.ParticleCount;
+            if (_cloudWorld.Length < count) _cloudWorld = new Vector3[Mathf.Max(count, 16)];
+            Matrix4x4 toWorld = transform.localToWorldMatrix;
+            _cloudMatrix = toWorld;
+            for (int i = 0; i < count; i++) _cloudWorld[i] = toWorld.MultiplyPoint(_simulation.GetPosition(i));
+            return _cloudWorld;
+        }
+
+        /// <summary>本体的碰撞集合，互碰组会往里挂别人的球云。</summary>
+        public CollisionSet ParticleCollisions { get { return _simulation == null ? null : _simulation.Collisions; } }
+
+        /// <summary>Inspector 上那个字段与 <c>group.Add(this)</c> 的回写共用同一个入口。</summary>
+        ParticleInteractionGroup IParticleBody.CloudGroup
+        {
+            get { return interactionGroup; }
+            set { interactionGroup = value; }
         }
 
         /// <summary>
         /// 把组件的变换与 Collider 列表同步给求解器。
-        /// 没开 collideWithSceneColliders 时一律不注入变换矩阵——保证默认路径与 v1.2.0 逐位一致。
+        /// 既没开 Collider 桥接、又不在互碰组里时一律不注入变换矩阵——保证默认路径与 v1.2.0 逐位一致。
+        /// 但**互碰组也必须注入**：球云存的是世界坐标、登记的也是 World 空间，
+        /// 这里偷懒留单位矩阵就会把局部坐标当成世界坐标用，互碰当场错位。
         /// </summary>
         void SyncColliders()
         {
             if (_simulation == null) return;
-            if (!collideWithSceneColliders)
+
+            // 惰性入组：Inspector 里拖了组但没人调 Add 是最常见的用法，
+            // 放在这里而不是 OnEnable，是因为 EditMode 测试里 OnEnable 不一定按预期时机跑。
+            if (interactionGroup != null && !interactionGroup.Contains(this)) interactionGroup.Add(this);
+
+            if (!collideWithSceneColliders && interactionGroup == null)
             {
                 _simulation.SetSimulationToWorld(Matrix4x4.identity);
                 return;

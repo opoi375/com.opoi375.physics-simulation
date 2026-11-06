@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Physics Simulation
   text: Mass-spring, cloth, soft body and fluid physics for Unity
-  tagline: Deterministic solver · mass-spring chains, PBD cloth, volume-preserving soft bodies, scene collision and PBF fluids · substepping & dt clamping · a pure logic layer you can unit-test
+  tagline: Deterministic solver · mass-spring chains, PBD cloth, volume-preserving soft bodies, scene collision, particle-to-particle interaction and PBF fluids · substepping & dt clamping · a pure logic layer you can unit-test
   image:
     src: /logo.png
     alt: Physics Simulation
@@ -21,6 +21,10 @@ features:
     title: Fluid simulation (v1.5.0)
     details: "PBF (Position Based Fluids): uniform hash-grid + CSR neighbour table, poly6/spiky kernels, density-constraint projection, tensile clamping and a displacement rail; a 1,456-particle dam break on the managed solver (measured: 13~21 ms/step at 1,000 particles, 65~97 ms at 4,096), drawn with DrawMeshInstanced so no 100k-triangle mesh is ever built"
     link: /en/fluid/
+  - icon: 🔗
+    title: Particle interaction (v1.6.0)
+    details: "A `ParticleInteractionGroup` connects bodies of any solver through one explicit registry; each body offers its particles as a sphere cloud, so soft↔soft, cloth↔cloth and mass-spring↔anything collide with no per-type branch. Trigger distance is the other body's radius + skin, and at `cloudRadiusFactor` 0.25 the contact is measurably never detected — the defaults (0.5) are the ones that work"
+    link: /en/interaction/
   - icon: 🧱
     title: Scene collision (v1.3.0)
     details: The solvers only know injected collision proxies (sphere / oriented box / capsule / half-space); the Unity layer samples Colliders for them — the logic layer never queries the scene, so closed-form assertions and bit-identical replay survive intact
@@ -51,7 +55,7 @@ features:
     link: /en/mass-spring/
   - icon: 🧪
     title: Deterministic & reproducible
-    details: No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions — 270 EditMode tests
+    details: "No Random, no Time, no parallelism. Same parameters and step count produce bit-identical results, so tests assert closed-form solutions — 344 EditMode tests"
     link: /en/reference/mass-spring-parameters
   - icon: 🧿
     title: Gizmo visualization
@@ -59,10 +63,10 @@ features:
     link: /en/tools/
   - icon: 🛠️
     title: Editor tools
-    details: "Tools > Physics Simulation > (mass-spring 100~103), Cloth (110~112), Soft Body (120~124), Fluid (130~132) — each with Create Demo Scene / Build In Current Scene / Dump State. Saving always goes through DemoSceneSave, which never opens a system dialog"
+    details: "Tools > Physics Simulation > (mass-spring 100~103), Cloth (110~112), Soft Body (120~124), Fluid (130~132), Interaction (130~132) — each with Create Demo Scene / Build In Current Scene / Dump State. Saving always goes through DemoSceneSave, which never opens a system dialog"
     link: /en/tools/
   - icon: 🗺️
     title: Roadmap
-    details: "v1.1.0 cloth · v1.2.0 soft bodies · v1.3.0 collision proxies + Collider bridging · v1.4.0 model audit · v1.5.0 PBF fluids, all shipped · v1.6.0 plans the Jobs + Burst parallel solver as an optional assembly"
+    details: "v1.1.0 cloth · v1.2.0 soft bodies · v1.3.0 collision proxies + Collider bridging · v1.4.0 model audit · v1.5.0 PBF fluids · v1.6.0 particle interaction + the parameter-activity contract, all shipped · the Jobs + Burst parallel solver is planned but not in any release"
     link: /en/guide/overview
 ---

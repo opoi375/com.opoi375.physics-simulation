@@ -39,8 +39,18 @@ namespace PhysicsSimulation
         /// </summary>
         public static int RefreshInto(IList<Collider> colliders, CollisionSet into)
         {
+            return RefreshInto(colliders, into, typeof(ColliderProxies));
+        }
+
+        /// <summary>
+        /// 同上，但按指定的登记者清理。**只清自己那一批**，不动别人登记的 World 代理。
+        /// 以前这里是无差别 <c>ClearWorldSpace()</c>，于是“开了 Collider 桥接又加了互碰组”
+        /// 的体每步都会被抹干互碰代理 —— 比完全不碰更难查。
+        /// </summary>
+        public static int RefreshInto(IList<Collider> colliders, CollisionSet into, object owner)
+        {
             if (into == null) return 0;
-            into.ClearWorldSpace();
+            into.ClearWorldSpaceOwnedBy(owner);
             if (colliders == null) return 0;
 
             int added = 0;
@@ -48,7 +58,7 @@ namespace PhysicsSimulation
             {
                 ICollisionProxy proxy = TryFrom(colliders[i]);
                 if (proxy == null) continue;                 // 不支持 / 禁用 / 毁掉的：跳过，不塞假代理
-                into.Add(proxy, CollisionProxySpace.World);
+                into.Add(proxy, CollisionProxySpace.World, owner);
                 added++;
             }
             return added;

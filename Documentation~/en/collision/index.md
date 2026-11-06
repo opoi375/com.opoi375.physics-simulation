@@ -68,7 +68,7 @@ cannot model a leak with a container. Don't use one when you want water to escap
 | --- | --- | --- | --- |
 | `SphereCollisionProxy` | sphere | radial | arithmetic **character-for-character** identical to v1.1.0's cloth obstacle, with a bit-identical comparison test |
 | `BoxCollisionProxy` | oriented box (OBB) | along the **shallowest** penetrating face; outside → along the closest-surface normal | any rotation supported; a thin slab exits through the nearest face instead of being flung sideways |
-| `CapsuleCollisionProxy` | segment + radius | radial on the cylinder, spherical on the caps | a degenerate zero-length axis falls back to a sphere instead of breaking |
+| `CapsuleCollisionProxy` | segment + radius | radial on the shaft, spherical on the caps | a degenerate zero-length axis falls back to a sphere instead of breaking |
 | `BoxContainerProxy` | **inside-out** OBB (a container: points outside get pinned in) | per axis, back to the nearest inner wall (minimum-displacement projection onto a convex set; leaving at a corner returns to the inner corner) | added in v1.5.0 for the fluid tank; `halfExtents` must all be positive; **deliberately breaks rule 1** — see the warning below |
 | `PlaneCollisionProxy` | **half-space** | always back to the normal side | see below — this is what makes landing work |
 
@@ -176,7 +176,23 @@ body free-falls, squashes 1.9% on impact and the volume constraint pops it back.
 | `updateCollidersEveryStep` | all three behaviours | `false` | turn on when colliders move or get enabled — rebuilds the proxy list each step (allocates) |
 
 Cost is `O(particles × proxies)` per substep, pure arithmetic, allocation-free while
-`updateCollidersEveryStep` stays off. v1.3.0 does **no** performance work (nor does v1.4.0, which shipped the model audit): the parallel solver is now scheduled for v1.6.0.
+`updateCollidersEveryStep` stays off. v1.3.0 does **no** performance work (nor does v1.4.0, which shipped the model audit, or v1.6.0, which shipped particle interaction): the Jobs + Burst parallel solver is still planned and is not part of any release.
+
+## Body-to-body contact (v1.6.0)
+
+Proxies answer "where is the scene geometry". A body pushing another body needs a proxy that answers "where is the *other
+body*", which is what `ParticleCloudProxy` does: each particle of the source body becomes a sphere, and the point being
+resolved is pushed outside every sphere it lands in. `ParticleInteractionGroup` wires those proxies both ways for an
+explicit member list — see [Particle interaction](/en/interaction/).
+
+Two consequences matter here because they look like proxy bugs and are not:
+
+- **The trigger distance is `other radius + skin`, not `r_A + r_B`.** The intruding particle is treated as a *point*, so
+two surfaces have to interpenetrate by roughly half a particle spacing before anything reacts. (`CollisionMath.SafeSkin`
+still floors a negative skin at 0, exactly as in rule 4 above.)
+- **Pinned particles are skipped by the resolve pass** since v1.6.0. `CollisionPass.ResolvePositions` takes the
+  per-particle `inverseMass` array, so a pinned cloth corner or a pinned soft-body layer acts as a static obstacle
+  instead of being shoved by whatever touches it.
 
 ## Still not in this release
 

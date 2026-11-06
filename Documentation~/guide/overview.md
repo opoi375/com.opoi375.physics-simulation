@@ -1,8 +1,8 @@
 # 概述
 
-`com.opoi375.physics-simulation` 是一个**质点弹簧 + 布料物理模拟工具包**，面向"想要自己写物理、但需要一层靠得住的地基"的场景。
+`com.opoi375.physics-simulation` 是一个**质点弹簧 + 布料 + 软体 + 流体物理模拟工具包**，面向"想要自己写物理、但需要一层靠得住的地基"的场景。
 
-它**不是** Unity 自带物理引擎的替代品：没有刚体动力学、没有 `Rigidbody` 互驱、碰撞只到质点级。它只解决一件事——**把一堆质点用弹簧连起来，稳定地、可复现地算下去**。绳子、链条、摆动、布料、软体都是从这一块地基长出来的；v1.3.0 起，地基上的质点还能落在场景的碰撞体上。
+它**不是** Unity 自带物理引擎的替代品：没有刚体动力学、没有 `Rigidbody` 互驱、碰撞只到质点级。它只解决一件事——**把一堆质点用弹簧连起来，稳定地、可复现地算下去**。绳子、链条、摆动、布料、软体都是从这一块地基长出来的；v1.3.0 起，地基上的质点还能落在场景的碰撞体上；v1.6.0 起，体与体之间也能互相碰（质点球云级，不是三角形级）。
 
 ## 设计原则
 
@@ -12,6 +12,7 @@
 | **确定性优先** | 无 `Random`、无 `Time`、无并行归约。相同参数 + 相同步数 → **逐位一致**的结果，因此可以写闭式解断言、可以做回放 |
 | **数值行为可预期** | 阻尼写成除数 `(1 + c·dt)` 而不是减项 `v -= c·v·dt`；粒子级阻尼乘数钳到 `[0,1]`；`dt` 有上限钳制 |
 | **API 面窄** | 6 个方法就能用完整套系统（`AddParticle` / `AddSpring` / `Pin` / `Step` / `ResetToInitial` / `ApplyForces`），没有"配置对象套三层"的仪式 |
+| **参数的生效方式必须声明**（v1.6.0） | 每个参数字段恰好标一个 `[RuntimeTunable]` 或 `[RequiresRebuild("理由")]`；两个都标或都不标算"未分类"，反射测试直接红。求解器持有 Behaviour 的那个参数**实例**（`ReferenceEquals`），不许再拷一份 —— 质点弹簧是唯一例外（`MassSpringSystem` 自带 `Parameters`，它的四个积分参数每步镜像） |
 | **不绑渲染管线** | 包依赖只有 `com.unity.test-framework`，URP / Built-in / 无管线都能用 |
 
 ## 目录结构
@@ -20,7 +21,7 @@
 | --- | --- |
 | `Runtime/MassSpring/` | 纯逻辑层（`Particle`、`Spring`、`MassSpringParameters`、`MassSpringIntegrator`、`MassSpringSystem`）+ Unity 层（`MassSpringBehaviour`、`MassSpringConfig`、`MassSpringParticleLink`） |
 | `Editor/MassSpring/` | 编辑器工具（`Tools > Physics Simulation` 菜单） |
-| `Tests/Editor/` | 30 个 EditMode 测试（积分器、弹簧力、系统行为、配置翻译层、演示构建器） |
+| `Tests/Editor/` | EditMode 测试（合计 **344**，覆盖积分器、弹簧力、系统行为、配置翻译层、演示工具、布料 / 软体 / 流体 / 碰撞 / 多体互碰、参数生效契约） |
 | `Documentation~/` | 本文档站（VitePress，中英双语）。`~` 后缀让 Unity 忽略该目录 |
 
 程序集：`PhysicsSimulation.Runtime` → `PhysicsSimulation.Editor` → `PhysicsSimulation.Editor.Tests`，命名空间分别是 `PhysicsSimulation`、`PhysicsSimulation.EditorTools`、`PhysicsSimulation.Editor.Tests`。
@@ -36,8 +37,9 @@
 | 1.2.0 | 软体：任意网格 → 焊接质点 + 三角形边结构弹簧 + 共边对顶点弯曲弹簧 + **散度定理体积约束**（不是四面体网格，也不需要 tet 化），复用质点弹簧内核；`SoftBodyBehaviour` 四种钉法与可序列化扰动、演示场景、31 个测试 | ✅ |
 | 1.3.0 | 碰撞代理：球 / OBB 盒 / 胶囊 / 半空间四种纯几何，三个求解器共用一套 `ICollisionProxy`（v1.5.0 起流体也接同一套）；`Simulation` 与 `World` 两种登记空间；`ColliderProxies` 从场景 Collider 采样；开关默认关，关掉时与 v1.2.0 逐位一致；软体终于落地不穿地 | ✅ 已发布 |
 | 1.4.0 | 模型审计：`SoftBodyMeshAudit` 逐网格判定 + 焊接原理页 + 真实项目模型实测表 | ✅ 已发布 |
-| **1.5.0** | **流体（PBF）**：均匀网格哈希 + CSR 邻居表、poly6/spiky/粘性拉普拉斯三种核、密度约束投影与双密度修正、拉力钳制、涡度约束、XSPH 黏度、碰撞代理复用 v1.3.0、`DrawMeshInstanced` 渲染、溃坝演示场景；**顺带补上流体漏掉的 `maxDeltaTime`** | ✅ 当前版本 |
-| 1.6.0 | 性能：`Jobs + Burst` 并行求解器（**可选程序集**，不装 Burst 就退回托管路径，包核心依赖保持为零）——原 v1.5.0 的内容，被流体让位 | 🚧 计划 |
+| **1.5.0** | **流体（PBF）**：均匀网格哈希 + CSR 邻居表、poly6/spiky/粘性拉普拉斯三种核、密度约束投影 + 拉力钳制 + 柔度项、涡度约束、XSPH 黏度、碰撞代理复用 v1.3.0、`DrawMeshInstanced` 渲染、溃坝演示场景；**顺带补上流体漏掉的 `maxDeltaTime`** | ✅ 已发布 |
+| **1.6.0** | **多体互碰**：`ParticleInteractionGroup` + `IParticleBody` + `ParticleCloudProxy`，体与体之间按**质点球云**互推，跨求解器不需要任何分支；**参数生效契约** `[RuntimeTunable]` / `[RequiresRebuild("理由")]` + 求解器持有参数实例；修正布料限幅轮数的记录（16 轮）、钉子被积分、流体 `substeps = 0` 静默冻结、球体积按 `localPosition` 生成等一批缺陷；全量测试 **344** 通过 | ✅ 当前版本 |
+| 未排期 | 性能：`Jobs + Burst` 并行求解器（**可选程序集**，不装 Burst 就退回托管路径，包核心依赖保持为零） | 🚧 计划 |
 
 ### 明确不做（至少在这几个版本里）
 
@@ -46,6 +48,9 @@ v1.3.0 的碰撞是**质点级 + primitive 解析**：球 / OBB 盒 / 胶囊 / �
 也**不会**拿包围盒冒充（宁可"这个碰撞体没生效"，也不要凭空多一面看不见的墙）。响应只有"削掉法向、保留切向"，
 没有摩擦与恢复系数。体积约束是梯度恢复力而不是硬约束，剧烈形变下允许约 1% 偏差；弯曲弹簧数量随三角化方式变化，
 测试只断言它的不变量（与结构弹簧不重叠、无重复、闭合网格上大于 0），不断言具体数字。
+
+v1.6.0 的互碰也是**质点球云**级而不是三角形级：接触判定距离 = **对方半径 + skin**，不是 `r_A + r_B`（一个体的质点在代理眼里是点），
+所以网格太稀会直接漏接触；等重的两个体堆不住，轻压重可以。详见 [多体互碰](/interaction/)。
 
 扩展点以 `TODO` 注释标在 `MassSpringSystem` 顶部（`IConstraint`、`IForceGenerator`、碰撞与睡眠），**v1 不声明空接口**——避免为了"将来可能用到"先造出一堆没人实现的抽象。
 

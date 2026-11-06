@@ -69,6 +69,22 @@ namespace PhysicsSimulation
         public int MeshVertexCount { get { return _weldMap == null ? 0 : _weldMap.Length; } }
         public int StructuralSpringCount { get { return _structural == null ? 0 : _structural.Length; } }
         public int BendSpringCount { get { return _bend == null ? 0 : _bend.Length; } }
+
+        /// <summary>
+        /// 结构弹簧的平均静止长度（米）——“粒子间距”的可观察量。
+        /// 互碰把它当成球半径的推导依据（半径至少要是间距的一半，否则对方粒子会从两球缝隙里漏过去）。
+        /// 没有结构弹簧时返回 0，由调用方自己定兑底值。
+        /// </summary>
+        public float AverageStructuralRestLength
+        {
+            get
+            {
+                if (_structural == null || _structural.Length == 0) return 0f;
+                double sum = 0.0;
+                for (int i = 0; i < _structural.Length; i++) sum += _structural[i].restLength;
+                return (float)(sum / _structural.Length);
+            }
+        }
         public int TriangleCount { get { return _triangles == null ? 0 : _triangles.Length / 3; } }
 
         /// <summary>每条棱都被两个三角形共享 ⇒ 闭合 ⇒ 体积可靠。</summary>
@@ -202,8 +218,8 @@ namespace PhysicsSimulation
 
             // ---- 全部校验通过，才开始改动自身状态 -------------------------
             var system = new MassSpringSystem();
-            system.Parameters.gravity = _parameters.gravity;
-            system.Parameters.globalDamping = _parameters.damping;
+            // 只有拓扑相关的东西在这里定型（质点、弹簧、静止长度）。
+            // gravity / globalDamping 是**每步的体力**，不在这里定格：见 Step 里的同步。
             system.Parameters.substeps = 1;                       // 子步由本类驱动，才能在中间注入体积力
             system.Parameters.maxDeltaTime = float.MaxValue;
 
@@ -449,6 +465,15 @@ namespace PhysicsSimulation
                 throw new ArgumentOutOfRangeException("deltaTime", "dt 必须是有限正数（秒），当前 " + deltaTime);
 
             float span = _parameters.ClampDeltaTime(deltaTime);
+
+            // 重力与全局阻尼是**每步的体力**，不是拓扑，所以必须在每一步同步进来。
+            // Build() 里原本是一次性快照 ⇒ “Rebuild 之后再改 parameters.gravity”静默无效：
+            // 外层 SoftBodyParameters 改了，内层 MassSpringSystem 还拿着建好时的旧值。
+            // 这个坑 v1.2.0 就埋着了，本轮把参数暴露到 Inspector 之后才照出来——
+            // 用户改重力会完全没有反应，而且不报错。现在改了立即生效，不需要重建。
+            _system.Parameters.gravity = _parameters.gravity;
+            _system.Parameters.globalDamping = _parameters.damping;
+
             int substeps = _parameters.EffectiveSubsteps;
             float h = span / substeps;
             float globalDamping = _parameters.damping;
@@ -484,11 +509,19 @@ namespace PhysicsSimulation
             if (speed > max) particle.velocity *= max / speed;
         }
 
+        /// <summary>
+        /// 最近一次 <see cref="Step"/> 里"两端都钉死、因此位置投影无法修复"的超限边数。
+        /// 大于 0 不代表出错（钉死的壳被外力拉长是合法的），但它是唯一能让人发现
+        /// "限幅在空转"的信号——以前这种情况什么都不说。
+        /// </summary>
+        public int IrreparableStretchEdges { get; private set; }
+
         /// <summary>把超过 maxStretchRatio 的结构弹簧按位置投影回来（钉住的一端不动）。多轮扫描收敛。</summary>
         void ClampStretch()
         {
             IReadOnlyList<Particle> particles = _system.Particles;
             float limit = _parameters.maxStretchRatio;
+            IrreparableStretchEdges = 0;
 
             for (int pass = 0; pass < StretchClampPasses; pass++)
             {
@@ -504,9 +537,13 @@ namespace PhysicsSimulation
                     float max = edge.restLength * limit;
                     if (length <= max || length <= 0f) continue;
 
+                    // 两端都钉死 ⇒ 这条边在位置空间里根本无解。必须在置脏**之前**跳过，
+                    // 否则 clean 永远为 false，每个子步白跑满 StretchClampPasses 轮却什么都不改，
+                    // 而且没人知道它一直超限。只计数、不抛：钉死的布料本来就可能被外力拉长。
+                    if (a.pinned && b.pinned) { IrreparableStretchEdges++; continue; }
+
                     clean = false;
                     Vector3 correction = delta * ((length - max) / length);
-                    if (a.pinned && b.pinned) continue;
                     if (a.pinned) b.position -= correction;
                     else if (b.pinned) a.position += correction;
                     else

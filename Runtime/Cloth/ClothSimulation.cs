@@ -34,6 +34,7 @@ namespace PhysicsSimulation
         private readonly Vector3[] _previous;
         private readonly Vector3[] _velocities;
         private readonly float[] _inverseMass;
+        private readonly float _freeInverseMass;
         private readonly bool[] _pinned;
 
         // ---- 约束的 SoA 存储：[0, structuralEnd) 结构、[structuralEnd, shearEnd) 剪切、[shearEnd, bendEnd) 弯曲
@@ -92,6 +93,12 @@ namespace PhysicsSimulation
                 }
             }
 
+            // 自由质点的逆质量在构造时定死一份。SetPinned 必须复用这份，不能再去读活的
+            // Parameters.mass：否则运行期改 mass 之后，重新 pin/unpin 过的质点会拿到新质量，
+            // 同一块布上出现两种质量（投影按 wA/(wA+wB) 分配修正量，形变直接算歪）；
+            // 而 mass = 0 会写出 1/0 = +Infinity，投影里 Inf*0 立刻变 NaN（实测三帧就全 NaN）。
+            _freeInverseMass = 1f / parameters.mass;
+
             _cA = new int[CountConstraints()];
             _cB = new int[_cA.Length];
             _cRest = new float[_cA.Length];
@@ -123,7 +130,14 @@ namespace PhysicsSimulation
         {
             ValidateIndex(index);
             _pinned[index] = pinned;
-            _inverseMass[index] = pinned ? 0f : 1f / Parameters.mass;
+            _inverseMass[index] = pinned ? 0f : _freeInverseMass;
+        }
+
+        /// <summary>某个质点当前的逆质量（0 表示钉住）。诊断与回归用。</summary>
+        public float InverseMass(int index)
+        {
+            ValidateIndex(index);
+            return _inverseMass[index];
         }
 
         public bool IsPinned(int index)
@@ -421,7 +435,7 @@ namespace PhysicsSimulation
         {
             if (_collisions.Count == 0) return;
             CollisionPass.ResolvePositions(_collisions, _positions, Parameters.collisionThickness,
-                _localToWorld, _worldToLocal, _spaceIsIdentity);
+                _localToWorld, _worldToLocal, _spaceIsIdentity, null, _inverseMass);
         }
 
         void Commit(float invH)

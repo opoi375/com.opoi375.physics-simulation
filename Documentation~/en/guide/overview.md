@@ -2,7 +2,7 @@
 
 `com.opoi375.physics-simulation` is a **mass-spring physics toolkit** for people who want to write their own simulation but need a trustworthy foundation.
 
-It is **not** a replacement for Unity's built-in physics: v1 has no rigid bodies, no collision detection and no `Rigidbody` interop. It does one job — **connect a pile of point masses with springs and integrate them stably and reproducibly**. Ropes, chains, swings, cloth and soft bodies all grow out of this same foundation.
+It is **not** a replacement for Unity's built-in physics: v1 has no rigid bodies and no `Rigidbody` interop. It does one job — **connect a pile of point masses with springs and integrate them stably and reproducibly**. Ropes, chains, swings, cloth and soft bodies all grow out of this same foundation.
 
 ## Design principles
 
@@ -20,7 +20,7 @@ It is **not** a replacement for Unity's built-in physics: v1 has no rigid bodies
 | --- | --- |
 | `Runtime/MassSpring/` | Pure logic (`Particle`, `Spring`, `MassSpringParameters`, `MassSpringIntegrator`, `MassSpringSystem`) + Unity layer (`MassSpringBehaviour`, `MassSpringConfig`, `MassSpringParticleLink`) |
 | `Editor/MassSpring/` | Editor tools (`Tools > Physics Simulation` menus) |
-| `Tests/Editor/` | 30 EditMode tests (integrator, spring force, system behaviour, config translation, demo builder) |
+| `Tests/Editor/` | 344 EditMode tests (integrator, spring force, system behaviour, config translation, cloth, soft body, collision, fluid, interaction, demo builders) |
 | `Documentation~/` | This bilingual site. The `~` suffix keeps Unity from importing it |
 
 Assemblies: `PhysicsSimulation.Runtime` → `PhysicsSimulation.Editor` → `PhysicsSimulation.Editor.Tests`, namespaces `PhysicsSimulation`, `PhysicsSimulation.EditorTools`, `PhysicsSimulation.Editor.Tests`.
@@ -32,14 +32,15 @@ Assemblies: `PhysicsSimulation.Runtime` → `PhysicsSimulation.Editor` → `Phys
 | 1.0.0 | Mass-spring: particles, springs, semi-implicit Euler, implicit damping, substepping, dt clamping, gizmos, editor tools, demo scene | ✅ |
 | 1.1.0 | Cloth: structural / shear / bend distance constraints solved with PBD projection, wind, sphere obstacles, `ClothBehaviour`, generated mesh, 36 tests | ✅ |
 | 1.2.0 | Soft bodies: any mesh → welded particles + triangle-edge structural springs + opposite-vertex bend springs + a **divergence-theorem volume constraint** (no tetrahedralisation needed), reusing the mass-spring core; `SoftBodyBehaviour` with four pin modes and a serializable perturbation, demo scene, 31 tests | ✅ |
-| **1.3.0** | Collision proxies: four pure shapes (sphere / OBB box / capsule / half-space) behind one `ICollisionProxy` shared by all three solvers; `Simulation` vs `World` registration spaces; `ColliderProxies` samples the scene's Colliders; off by default and bit-identical to v1.2.0 when off; soft bodies finally land instead of falling through | ✅ current |
+| 1.3.0 | Collision proxies: four pure shapes (sphere / OBB box / capsule / half-space) behind one `ICollisionProxy` shared by all three solvers; `Simulation` vs `World` registration spaces; `ColliderProxies` samples the scene's Colliders; off by default and bit-identical to v1.2.0 when off; soft bodies finally land instead of falling through | ✅ shipped |
 | 1.4.0 | Model audit: `SoftBodyMeshAudit` per-mesh verdicts, the welding deep-dive, and a real-asset measurement table | ✅ shipped |
-| **1.5.0** | **Fluids (PBF)**: uniform hash-grid + CSR neighbour table, poly6/spiky/viscosity-laplacian kernels, density-constraint projection with double-density correction, tensile clamping, vorticity confinement, XSPH viscosity, reuses the v1.3.0 collision proxies, `DrawMeshInstanced` rendering, dam-break demo scene — and the `maxDeltaTime` cap the fluid was missing | ✅ current |
-| 1.6.0 | Performance: `Jobs + Burst` parallel solver as an **optional assembly** (fall back to the managed path without Burst; core package dependencies stay at zero) | 🚧 planned |
+| 1.5.0 | **Fluids (PBF)**: uniform hash-grid + CSR neighbour table, poly6/spiky/viscosity-laplacian kernels, density-constraint projection, `clampTensileLambda` tensile clamping, the `complianceAlpha` relaxation term, vorticity confinement, XSPH viscosity, reuses the v1.3.0 collision proxies, `DrawMeshInstanced` rendering, dam-break demo scene — and the `maxDeltaTime` cap the fluid was missing | ✅ shipped |
+| **1.6.0** | **Particle interaction**: an explicit `ParticleInteractionGroup` connects bodies across all three solvers through one sphere-cloud contact channel, plus the **parameter activity contract** (`[RuntimeTunable]` / `[RequiresRebuild]` on every field, solvers holding the behaviour's parameter instance) | ✅ current |
+| next | Performance: `Jobs + Burst` parallel solver as an **optional assembly** (fall back to the managed path without Burst; core package dependencies stay at zero) — **not** in v1.6.0 | 🚧 planned |
 
 ### Explicitly out of scope (for now)
 
-Self-collision for cloth and soft bodies, triangle-level intersection tests, interop with Unity `Rigidbody` / `ConfigurableJoint` (the jelly can press on a crate, the crate will not move), networking and replays, adaptive timesteps. Since v1.3.0 collision is **particle level with analytic primitives**: sphere, oriented box, capsule, half-space. `MeshCollider` and `Terrain` are deliberately unsupported and are **not** faked with a bounding box — "this collider had no effect" beats "an invisible wall appeared out of nowhere". The response is only "cut the normal velocity component, keep the tangent": no friction, no restitution. The volume constraint is a gradient restoring force rather than a hard constraint, so roughly 1% deviation is tolerated under violent deformation; bend spring counts depend on the triangulation, so tests assert invariants (disjoint from structural springs, no duplicates, non-zero on a closed mesh) rather than specific numbers.
+Self-collision for cloth and soft bodies, triangle-level intersection tests, interop with Unity `Rigidbody` / `ConfigurableJoint` (the jelly can press on a crate, the crate will not move), networking and replays, adaptive timesteps. Since v1.3.0 collision is **particle level with analytic primitives**: sphere, oriented box, capsule, half-space. Since v1.6.0 two bodies can also push each other, but only when they are registered in the same `ParticleInteractionGroup` — there is no automatic all-scene contact, because a hidden global would change the behaviour of releases that already work. `MeshCollider` and `Terrain` are deliberately unsupported and are **not** faked with a bounding box — "this collider had no effect" beats "an invisible wall appeared out of nowhere". The response is only "cut the normal velocity component, keep the tangent": no friction, no restitution. The volume constraint is a gradient restoring force rather than a hard constraint, so roughly 1% deviation is tolerated under violent deformation; bend spring counts depend on the triangulation, so tests assert invariants (disjoint from structural springs, no duplicates, non-zero on a closed mesh) rather than specific numbers.
 
 Extension points are marked as `TODO` comments at the top of `MassSpringSystem` (`IConstraint`, `IForceGenerator`, collision and sleeping). v1 deliberately does **not** declare empty interfaces — abstractions nobody implements are worse than none.
 

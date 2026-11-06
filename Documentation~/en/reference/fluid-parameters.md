@@ -1,8 +1,19 @@
 # Fluid Parameter Reference
 
-`FluidParameters` (namespace `PhysicsSimulation`). Every field is editable in the Inspector; call
-`FluidBehaviour.Rebuild()` after changing them. `Validate()` runs automatically when a `FluidSimulation` is built and
-**throws immediately** on invalid values — it never silently hands you a wrong simulation.
+`FluidParameters` (namespace `PhysicsSimulation`). Every field is editable in the Inspector. `Validate()` runs
+automatically when a `FluidSimulation` is built and **throws immediately** on invalid values — it never silently hands you
+a wrong simulation.
+
+Since v1.6.0 every field carries exactly one marker: `[RuntimeTunable]` (edit during Play, effective next step) or
+`[RequiresRebuild("why")]` (read once at build time). A reflection test fails if a new field carries neither. Only two
+fields are rebuild-only:
+
+| Rebuild-only | Why |
+| --- | --- |
+| `particleSpacing` | the initial lattice and the neighbour-grid cell size both derive from it; the particle set already exists |
+| `maxParticles` | only read at build time, to refuse an over-budget lattice |
+
+Everything else in this page — including `kernelRadius`, which rebuilds the neighbour table every substep — is live.
 
 ## The resolution trio (they constrain each other; change one, look at the other two)
 
@@ -22,8 +33,8 @@ Derived (read-only):
 
 | Field | Default | Constraint | Notes |
 | --- | --- | --- | --- |
-| `substeps` | 2 | `>= 1` | substeps per `Step(dt)`. **Raising this is a better deal than raising `solverIterations`** (the neighbour table is rebuilt once per substep, linear cost; each extra iteration is another full sweep) |
-| `solverIterations` | 2 | `>= 1` | density projections per substep. 0 means "don't solve incompressibility" |
+| `substeps` | 2 | `>= 1` | substeps per `Step(dt)`. **Raising this is a better deal than raising `solverIterations`** (the neighbour table is rebuilt once per substep, linear cost; each extra iteration is another full sweep). Floored at 1 at run time (`EffectiveSubsteps`) |
+| `solverIterations` | 2 | `>= 1` | density projections per substep. **Not** an on/off switch: `0` is floored to 1 at run time (`EffectiveSolverIterations`), so "disable the incompressibility solve" is not reachable through this field — with `substeps = 0` the old build froze the water silently (no exception, no log, no NaN, 0.0000 m of displacement over ten steps), which is exactly the failure the floor removes |
 | `complianceAlpha` | 0 | `>= 0` | **relaxation factor**: λ is scaled by `1/(1+α)`. `0` = strictly incompressible; `0.1~1` gives a soft/foamy feel. This is not the paper's dimensionless compliance |
 | `clampTensileLambda` | true | — | zero out `λ > 0` ("too sparse, pull neighbours in"). Real liquids have no such force; leaving it on clumps sparse particles and films the free surface |
 | `maxParticles` | 8192 | `>= 1` | building more particles is **refused** (`LastBuildError` reports the actual count) instead of letting the frame rate collapse |
@@ -66,7 +77,7 @@ prevents "isolated particle, zero denominator". To soften the fluid, move `compl
 | Field | Default | Notes |
 | --- | --- | --- |
 | `enableBoxContainer` | `false` | Confine the water to an axis-aligned (optionally rotated) box. **It is a serialized `FluidBehaviour` field, not a runtime `Collisions.Add` call** — proxies added by hand vanish after `Rebuild()` (which happens on entering Play， measured the hard way), so the container has to travel with the component |
-| `containerCenter` | `Vector3.zero` | Container centre (world space) |
+| `containerCenter` | `Vector3.zero` | Container centre, in the same space as the particle coordinates (the component's local/simulation space) |
 | `containerHalfSize` | `Vector3.zero` | Half size in metres， all three components must be positive， otherwise `Validate` reports it and the container is skipped |
 
 That is how the demo tank works: six plates are drawn， `ApplyTankContainer` writes the cavity into those three
@@ -105,7 +116,7 @@ Read-only observables: `SurfaceMesh` / `SurfaceMaterial` / `SurfaceRevision` (ho
 | `HasNonFiniteState()` | any NaN/Inf | hard divergence check |
 | `Positions` / `GetPosition(i)` / `GetVelocity(i)` | state access | custom rendering or external coupling |
 | `Collisions` | the `CollisionSet` | add/remove colliders without rebuilding particles |
-| `SetSimulationToWorld(m)` | local ↔ world matrix | used by the component bridge; keep the identity default in hand-written solvers |
+| `SetSimulationToWorld(m)` | local ↔ world matrix | used by the component bridge (particles stay local, `localToWorld` is applied at render time); keep the identity default in hand-written solvers |
 
 ## Related pages
 

@@ -128,6 +128,24 @@ Three traps worth knowing before you start — each one was paid for:
 
 To see whether anything is actually moving, run **Tools → Physics Simulation → Fluid → Dump State (132)**: density ratio, average neighbours, max speed, bounds and `Truncated` in one shot. **A density ratio under 0.7 or fewer than 8 average neighbours means leaking or blowing up** — fix the geometry before touching parameters.
 
+## Making two bodies touch (v1.6.0)
+
+```csharp
+var group = gameObject.AddComponent<ParticleInteractionGroup>();   // one per scene is usually enough
+group.Add(jellyA);          // SoftBodyBehaviour
+group.Add(scarf);           // ClothBehaviour — mixing solvers needs no extra setup
+```
+
+No group = the released behaviour, bit for bit. Two things surprise everyone on the first try:
+
+- **The trigger distance is the other body's radius + skin, not `r_A + r_B`** — surfaces have to interpenetrate by
+  roughly half a particle spacing before anything reacts;
+- **`cloudRadiusFactor` below the default 0.5 does not mean "finer contact", it means missing contact.** At 0.25 the
+  same pair measured *zero* reaction for 360 steps. Densify the mesh instead.
+
+Equal-mass bodies do not stack (they end up side by side); light pressing on heavy does work. Details in
+[Particle interaction](/en/interaction/).
+
 ## Next
 
 - Formulas, parameters, stability: [Mass-Spring](/en/mass-spring/) · [Cloth](/en/cloth/) · [Soft Body](/en/soft-body/)

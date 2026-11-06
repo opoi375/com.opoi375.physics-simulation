@@ -62,6 +62,7 @@ public interface ICollisionProxy
 | `CapsuleCollisionProxy` | 线段 + 半径 | 柱身沿径向、端帽按球 | 轴段退化（长度 0）时整体退化成球，不崩 |
 | `BoxContainerProxy` | **内侧**方向包围盒（容器，语义反过来：把体外的点钉回体内） | 逐轴钉回最近内壁（凸集合最小位移投影，角上越界回到内角） | v1.5.0 为流体水箱新增；`halfExtents` 三分量必须为正；**故意不遵守规矩 1**，见下方 warning |
 | `PlaneCollisionProxy` | **半空间** | 一律顶回法线一侧 | 见下——软体能落地的关键 |
+| `ParticleCloudProxy` | 另一个体的**质点球云**（v1.6.0） | 找最近球心，沿球心连线推开 | 互碰用；判定距离 = **对方半径 + skin**，不是 `r_A + r_B`。详见[多体互碰](/interaction/) |
 
 ::: warning 平面是半空间，不是"无限薄的墙"
 `PlaneCollisionProxy` 没有"体内多深"的概念：质点穿到地面以下 3 米，也一律顶回**面上 + skin**。
@@ -157,9 +158,10 @@ SoftBodyJelly：钉住 0 | 碰撞代理 1 个
 | `collideWithSceneColliders` | 三个 Behaviour | `false` | 打开才注入矩阵、才读 Collider |
 | `sceneColliders` | 三个 Behaviour | 空 | 参与碰撞的 Collider 列表 |
 | `updateCollidersEveryStep` | 三个 Behaviour | `false` | 碰撞体会动/会开关时再开，每步重建代理列表（会分配内存） |
+| `interactionGroup` / `cloudRadiusFactor` | 三个 Behaviour（v1.6.0） | `null` / 软体与布料 `0.5`、质点弹簧 `1.0` | 体与体互碰；球云代理不走 `sceneColliders` 这条路，它由一个显式登记的组维护 |
 
 开销是 `O(质点数 × 代理数)` 每个子步，纯算术、无分配（`updateCollidersEveryStep` 关掉时）。
-v1.3.0 **没有做任何性能优化**（v1.4.0 也没有，那一版做的是模型审计）：并行求解器现在排在 v1.6.0。
+v1.3.0 **没有做任何性能优化**（v1.4.0 也没有，那一版做的是模型审计；v1.6.0 做的是多体互碰与参数生效契约）：并行求解器仍未排期。
 
 ## 本版仍然不做
 
@@ -168,6 +170,7 @@ v1.3.0 **没有做任何性能优化**（v1.4.0 也没有，那一版做的是�
 - 自碰撞（布料穿过自己、软体穿过自己）；
 - 三角形/体元级相交——全部是**质点**级；
 - 与 `Rigidbody` 互驱：既不会让刚体带动锚点，也不会把力还给刚体。软体能压住箱子，箱子不会动。
+- 体与体的**三角面级**接触：v1.6.0 的互碰是质点球云级（接触判定距离 = 对方半径 + skin），不是三角面。
 - 碰撞事件回调（`OnCollisionEnter` 风格）。
 
 ::: warning 求解器不查场景，所以关掉的碰撞体不会自动生效

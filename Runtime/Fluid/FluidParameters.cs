@@ -17,42 +17,54 @@ namespace PhysicsSimulation
     [Serializable]
     public class FluidParameters
     {
+        [RuntimeTunable]
         [Tooltip("静止密度 ρ0（千克/立方米）。水就是 1000")]
         public float restDensity = 1000f;
 
+        [RequiresRebuild("初始体积采样与邻居格尺寸都按间距定，粒子集已生成")]
         [Tooltip("初始粒子间距 d（米）。粒子质量按 m = ρ0·d³ 推出来；d 减半 ⇒ 粒子数 ×8、成本 ×8")]
         public float particleSpacing = 0.05f;
 
+        [RuntimeTunable]
         [Tooltip("核支撑半径 h（米）。必须大于 d，常用 h = 2d")]
         public float kernelRadius = 0.1f;
 
+        [RuntimeTunable]
         [Tooltip("每帧子步数。流体漏碰撞主要就发生在这里：1 子步时一步能跨过整块薄墙")]
         public int substeps = 2;
 
+        [RuntimeTunable]
         [Tooltip("密度约束的投影迭代次数。2 次是画质/成本的平衡点，1 次会明显漏体积（粒子一坨坨分开）")]
         public int solverIterations = 2;
 
         [Tooltip("松弛系数 α：每轮迭代只修正所需位移的 1/(1+α)。0 = 严格投影（不可压），" +
                  "越大水越软、越容易看出'密度没顶住'。它不改变收敛点，只改变收敛速度")]
+        [RuntimeTunable]
         [Range(0f, 4f)]
         public float complianceAlpha = 0f;
 
         [Tooltip("钳掉拉力（正 λ）。关掉之后自由表面会把整坨水吸成一团点 —— 名字不叫 clampNegative，" +
                  "因为该钳的是**正** λ：压缩时 λ 为负（推开），稀疏时 λ 为正（吸引）")]
+        [RuntimeTunable]
         public bool clampTensileLambda = true;
 
+        [RuntimeTunable]
         [Tooltip("XSPH 速度插值粘度 [0,1]。0 = 无粘（飞溅多），0.05~0.5 = 常见水/油")]
         public float xsphViscosity = 0.05f;
 
+        [RuntimeTunable]
         [Tooltip("涡度约束强度。0 = 关（默认，省一遍邻居表）；0.2~1.0 能补回被数值耗散抹掉的漩涡")]
         public float vorticityEpsilon = 0f;
 
+        [RuntimeTunable]
         [Tooltip("重力（模拟空间，米/秒²）")]
         public Vector3 gravity = new Vector3(0f, -9.81f, 0f);
 
+        [RuntimeTunable]
         [Tooltip("碰撞厚度（皮肤）：粒子中心离碰撞面至少留这么远")]
         public float collisionThickness = 0.005f;
 
+        [RequiresRebuild("只在 Build 时用来拒绝超预算的初始粒子集")]
         [Tooltip("粒子数上限。超了直接拒绝构建，而不是让帧率崩了再去查")]
         public int maxParticles = 8192;
 
@@ -62,6 +74,7 @@ namespace PhysicsSimulation
         /// Play 头几帧质心就掉到 y = −1394 m。与布料/质弹簧/软体同一套语义：
         /// <c>&lt;= 0</c> 视为不钳制。
         /// </summary>
+        [RuntimeTunable]
         [Tooltip("单步 dt 上限（秒），防第一帧/卡帧的秒级 deltaTime 把水甩飞；<= 0 表示不钳制")]
         [Range(0f, 1f)]
         public float maxDeltaTime = 1f / 30f;
@@ -83,6 +96,7 @@ namespace PhysicsSimulation
         /// 钳住 |v| 之后，“单步最大位移 小于 板厚的一半”才变成一条可验的不变式（见
         /// <c>FluidTankSealTests</c>）；而不钳时它只是一个“今天恰好没漏”的巧合。
         /// </summary>
+        [RuntimeTunable]
         [Tooltip("速度上限（米/秒），0 表示不限制。水箱这类薄碰撞体必须设，否则水会穿板漏走")]
         public float maxSpeed = 0f;
 
@@ -131,6 +145,12 @@ namespace PhysicsSimulation
             p.maxSpeed = maxSpeed;
             return p;
         }
+
+        /// <summary>实际生效的子步数（至少 1）。运行期有人把 substeps 设成 0 也不会让整帧静默冻结。</summary>
+        public int EffectiveSubsteps { get { return substeps < 1 ? 1 : substeps; } }
+
+        /// <summary>实际生效的投影迭代次数（至少 1）。0 次等于不解密度约束。</summary>
+        public int EffectiveSolverIterations { get { return solverIterations < 1 ? 1 : solverIterations; } }
 
         public void Validate()
         {

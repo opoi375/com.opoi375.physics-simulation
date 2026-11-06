@@ -25,13 +25,16 @@
 - **半空间语义** — 平面没有"体内多深"的概念：穿到地面以下 3 米也一律顶回面上 + `skin`，软体不会被子地面吞掉；`MeshCollider` / `Terrain` 明确不支持，也**不拿包围盒冒充**（`TryFrom` 返回 `null`）
 - **两种积分器要分开处理碰撞** — 布料是 PBD，位置被修正后速度自动跟着修正；质点弹簧与软体是半隐式欧拉，没有这种回算，所以只顶位置会让法向速度一路累积 ⇒ 同时削掉穿入方向的速度分量（切向保留，所以会沿斜面滑而不粘）
 - **默认关、关了逐位一致** — `collideWithSceneColliders` 默认 `false`：不注入变换矩阵、不生成代理，于是质点坐标压根不进 `Matrix4x4`；布料的球障碍算术另有逐位对照测试（把 v1.2.0 那段抄进测试，13 个样本比 `SingleToInt32Bits`）
-- **流体模拟（v1.5.0）** — `FluidSimulation` 用 **PBF（Position Based Fluids）**：均匀网格哈希 + CSR 邻居表、poly6/spiky/粘性拉普拉斯三种核、密度约束投影 + 双密度修正 + 拉力钳制，外加 XSPH 黏度与涡度约束；`FluidVolume` 提供盒 / 球 / 柱 / 溃坝四种初始采样并报告预算截断
+- **流体模拟（v1.5.0）** — `FluidSimulation` 用 **PBF（Position Based Fluids）**：均匀网格哈希 + CSR 邻居表、poly6/spiky/粘性拉普拉斯三种核、密度约束投影 + 拉力钳制（`clampTensileLambda`）+ 柔度项（`complianceAlpha`），外加 XSPH 黏度与涡度约束；`FluidVolume` 提供盒 / 球 / 溃坝三种初始采样，超出预算直接报错而不是静默截断
 - **流体的碰撞与 dt 语义与其它模块一致** — 复用 v1.3.0 的 `CollisionSet`（水撞墙就停，不弹），`maxDeltaTime` 默认 1/30；这条钳制是**进 Play 第一帧秒级 dt 把整箱水甩到 1651 米外**之后补上的，四个求解器现在语义统一
 - **流体水面是等值面，用 marching tetrahedra** — 一堆小球看着像粒子特效不像水，所以 `FluidRenderMode.Surface` 把粒子 splat 成标量场再取 `α = 0.5` 的等值面。不用 256 case 的 marching cubes 表（要手抄四千多个整数，抄错就是"偶尔破面"），改成每个立方体 Kuhn 剖成 6 个四面体：剖分对平移不变 ⇒ 相邻格子共用面对角线 ⇒ **天生闭合**，而且这条是被测试数出来的（边界边必须为 0）
 - **流体渲染走 `DrawMeshInstanced`** — 一帧生成十万面网格不可接受，所以质点用实例化小球画，`Mesh` 与 `Material` 全场景共享一个；材质管线无关（反射找 shader，Built-in / URP 都能落地）
 - **水可以关进一个内侧盒子容器** — `BoxContainerProxy` 把越界的点**逐轴**钉回最近内壁（往凸集合做最小位移投影），而不是像实体板代理那样"沿穿透最浅的一面推出去"；演示水箱的六块板因此退回成纯视觉、连挡镜头的两面墙都不画
 - **流体实测成本（托管，无 Burst）** — 基准用例固定 `d = 0.05`、`h = 0.1`：1000 粒 **13.3 ~ 21.2 ms/步**、4096 粒 **64.7 ~ 97.7 ms/步**（本机有后台负载，门限用规模比值 4.59~4.88 而不是绝对毫秒）；演示那档 1456 粒 / 平均邻居 25.1 落在两行之间，量级 20~60 ms/步（子步 2 × 迭代 2 即每帧 4 次投影），演示预算定在 1500 粒
-- **测试** — 270 个 EditMode 测试（30 质点弹簧 + 38 布料 + 36 软体 + 38 碰撞 + 22 模型审计 + 15 扫描工具 + 89 流体 + 2 存盘口子）。数字按文件里 `[Test] + [TestCase]` 静态数出并与 Runner 对账
+- **测试** — 344 个 EditMode 测试，全绿（30 质点弹簧 + 38 布料 + 36 软体 + 38 碰撞 + 37 模型审计 + 15 扫描工具 + 89 流体 + 2 存盘口子 + 46 互碰 + 28 评审回归与参数契约）。数字按文件里 `[Test] + [TestCase]` 静态数出，并与 Runner **逐类枚举**对账（命名空间级过滤器会漏掉新类，别用它数）
+- **多体质点互碰（v1.6.0）** — `ParticleInteractionGroup` 把软体 / 布料 / 质点弹簧放进同一个组，体与体之间用**质点球云**互推（`IParticleBody` + `ParticleCloudProxy`），跨求解器不需要任何额外分支。显式登记、无成员时行为与之前逐位一致。`cloudRadiusFactor` 可调（软体/布料默认 0.5），并受静息尺度上界约束
+- **参数生效契约（v1.6.0）** — 每个参数字段必须标 `[RuntimeTunable]` 或 `[RequiresRebuild(理由)]`，反射测试守着"新增字段必须表态"；求解器必须持有 Behaviour 的那个参数**实例**，不许再偷偷拷一份。这条契约是为了断掉一类反复出现的缺陷：参数在构造时被快照，之后 Inspector 上怎么改都静默无效
+
 - **模型审计（v1.4.0）** — `SoftBodyMeshAudit` 用**真实求解器**跑 90 步、落地在世界空间地面上，给任意网格出判定：闭合 / 体积保持 / 翻面 / 零厚度壳 / 退化 / 构建失败，附焊接比与每步耗时；`永不抛异常`，脏输入也照样成行
 - **编辑器扫描** — `Tools/Physics Simulation/Soft Body/Audit Mesh Assets In Folder (124)` 一次扫全项目，输出"默认参数 + 按尺寸放大的推荐参数"两张 Markdown 表与好转/变差对照（预算线：单次 120 个、顶点 4000）
 
@@ -84,7 +87,8 @@ https://github.com/opoi375/com.opoi375.physics-simulation.git
 | **1.3.0** | **碰撞**：`ICollisionProxy`（球 / OBB 盒 / 胶囊 / 半空间）三求解器共用、`Simulation` 与 `World` 两种登记空间、`ColliderProxies` 桥接场景 Collider、软体终于落地；默认关且关掉时与 v1.2.0 逐位一致；33 个新测试，全量 130 |
 | **1.4.0** | **模型审计**：`SoftBodyMeshAudit` 用真实求解器跑 90 步给每个网格出判定（Healthy / OpenMesh / InvertedWinding / DegenerateVolume / DegenerateWeld / Unstable / BuildFailed）、"焊接到底怎么做的"原理页、项目 104 个真实网格的实测表；+40 个测试，全量 170 |
 | **1.5.0** | **流体（当前版本）**：PBF 密度约束投影 + 双密度修正 + 拉力钳制 + XSPH + 涡度约束，均匀哈希邻居表，四种体积采样，`FluidBehaviour` 世界空间模拟 + `DrawMeshInstanced` 粒子渲染 + **marching tetrahedra 水面**，**六面密封**水箱溃坝演示场景（六块板只画不碰，水由一个内侧盒子容器代理 `BoxContainerProxy` 兜住）；补齐流体漏掉的 `maxDeltaTime`，并加了平流速度上限 `maxSpeed`；全量 **270** |
-| 1.6.0 | **性能**：`Jobs + Burst` 并行求解器，放在**可选程序集**里（不装 Burst 自动退回托管路径，包核心依赖保持为零）+ 基准数字 —— 原 1.5.0 的内容，被流体让位 |
+| **1.6.0** | **多体互碰**：三个求解器共用质点球云接触（`IParticleBody` / `ParticleCloudProxy` / `ParticleInteractionGroup`），`cloudRadiusFactor` 可调；**参数生效契约**（`[RuntimeTunable]` / `[RequiresRebuild]` + 反射矩阵测试）。修掉一批"静默失效"：钉住质点仍会漂走、`ResetToInitialLayout` 丢水箱容器、质点弹簧播放期改参数无效、流体 `substeps=0` 静默冻结、布料 `mass=0` 变 NaN、球体积把 `localPosition` 当球心。全量 **344** |
+| 1.7.0 | **性能**：`Jobs + Burst` 并行求解器，放在**可选程序集**里（不装 Burst 自动退回托管路径，包核心依赖保持为零）+ 基准数字 |
 
 ### 明确不做（至少在本包的这几个版本里）
 
@@ -93,7 +97,7 @@ https://github.com/opoi375/com.opoi375.physics-simulation.git
 不做三角形级相交；`MeshCollider` 与 `Terrain` 明确不支持，也**不拿包围盒冒充**。
 响应只有"削掉法向、保留切向"，没有摩擦系数与恢复系数。
 体积约束是梯度恢复力而不是硬约束，剧烈形变下允许约 1% 偏差。
-流体是**粒子云而不是水面**：没有表面重建（不做 marching cubes / UF 核加权模糊）、没有表面张力，黏性只有 XSPH 一档；规模受托管 O(n·k) 成本限制，演示预算 1500 粒。
+流体默认**逐粒子渲染**（`FluidRenderMode.Particles`），看起来是粒子云而不是水面；想要水面就切到 `Surface` 模式，用 **marching tetrahedra** 做等值面重建（`FluidSurface`），代价是每帧重建标量场。没有表面张力，黏性只有 XSPH 一档；规模受托管 O(n·k) 成本限制，演示预算 1500 粒。
 
 ## License
 

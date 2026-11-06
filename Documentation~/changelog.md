@@ -1,5 +1,42 @@
 # 更新日志
 
+## [1.6.0] - 2026-10-08
+
+### Added
+- **多体质点互碰** `Runtime/Interaction/`：`IParticleBody`（既能把自己的质点当球云供别人碰撞、又能被别人推的体）、`ParticleCloudProxy`（球云上的均匀网格哈希，按 `CloudVersion` 刷新，所以 EditMode 循环与 Play 帧行为一致）、`ParticleInteractionGroup`（显式登记，没有成员时已发布行为逐位不变）。三个求解器都实现 `IParticleBody`，软体↔软体、布料↔布料、质点弹簧↔任何体都不需要按类型分支
+- **三个 Behaviour 上的 `cloudRadiusFactor`**（软体 / 布料默认 0.5 = 相邻球相切；质点弹簧默认 1.0，因为它的 `particleRadiusBase` 本来就是绝对半径），半径另受静息尺度上界 `cbrt(静息体积) × 0.25` 钳制
+- **碰撞代理归属**：`CollisionEntry.Owner`、`CollisionSet.Add(proxy, space, owner)`、`ClearWorldSpaceOwnedBy(owner)`；`ColliderProxies.RefreshInto` 只清自己的条目，互碰代理才不会被每帧的场景 Collider 刷新顺手清掉
+- **互碰演示工具（130~132）** 与 `Assets/Scenes/ParticleInteractionDemo.unity`：两个果冻 + 一条围巾在同一个组里，`Dump State` 打印最近球心距 —— 互碰有没有生效靠数字，不靠截图
+- **参数生效契约** `Runtime/Common/ParameterActivity.cs`：`[RuntimeTunable]` / `[RequiresRebuild("理由")]`，每个参数字段必须恰好标一个；两个都标或都不标 = 未分类，反射测试直接红。求解器必须持有 Behaviour 的那个参数**实例**（`ReferenceEquals`），不许再拷一份；质点弹簧是唯一例外（`MassSpringSystem` 自带 `Parameters`，四个积分参数每步镜像）
+- **`SoftBodyParameters` 现在是 `[Serializable]`**：软体是四个模块里唯一漏了的，Unity 不绘制不可序列化字段，所以那十几项力学参数之前根本不在 Inspector 里
+- **344 个 EditMode 测试全过**（按 `[Test] + [TestCase]` 逐类静态数，再与 Runner **逐类枚举**对账；命名空间级过滤器会返回旧的子集 316，别用它数）
+
+### Fixed
+- **流体的空间写错了**：粒子坐标是**组件局部**的（`FluidBehaviour` 自己的注释就是这么写的），渲染时才乘 `localToWorld`。v1.5.0 的发布说明写成"世界空间"，是错的
+- **`FluidBehaviour.ResetToInitialLayout()` 丢掉所有碰撞代理**（含水箱容器）：它建了新求解器却只接回场景 Collider 桥，于是容器消失、水自由落体到 `y = −92`（动能 16904）。现在 `Reset` 与 `Rebuild` 共用 `WireSimulation()`
+- **流体的 `substeps` / `solverIterations` 运行期没有下界**：`Validate()` 只在构造时跑，设成 0 后 `subStep = dt / 0 = +∞`、循环一次都不进——水**十步位移 0.0000**、无异常、无 NaN（静默冻结）。现在走 `EffectiveSubsteps` / `EffectiveSolverIterations`（下限 1）
+- **球体积按 `transform.localPosition` 取球心**：组件在 `(3,0,0)` 时水生成到世界 `(6,0,0)`。盒与溃坝一直在原点，只有球这一支写错
+- **布料拉伸限幅实际是 16 轮**（文档长期写成 32）
+- **布料逆质量半冻结、`mass = 0` 会变 `+Infinity`**：构造函数烘 `1/mass`、`SetPinned` 又读实时值，同一块布两种质量；`mass = 0` 三步内全变 NaN。现在逆质量构造时算好一份、`SetPinned` 复用，`mass` 归类为"需要重建"，`mass = 0` 不再产生 Infinity/NaN
+- **钉住的质点仍被积分**：旧实现只把加速度归零，然后照样 `position += velocity * dt`，1 m/s 的钉住处**十步漂 0.1667 m**。`Pin()` 现在清零速度，积分器对 `inverseMass <= 0` 早退
+- **软体的 `gravity` / `damping` 在 `Rebuild()` 之后被静默忽略**（自 v1.2.0 起）：`Build()` 把它们拷进内层系统就再也不读。现在 `Step()` 开头每步同步
+- **质点弹簧的四个积分参数被冻在 `Rebuild()` 里**：`gravity` / `globalDamping` / `substeps` / `maxDeltaTime` 播放中改毫无反应也不报错；现在每步同步进 `MassSpringSystem`
+- **软体限幅在两端都钉死的超限边上空转**：`clean = false` 写在 `a.pinned && b.pinned` 早退之前，每个子步白跑满 8 趟、什么也不改也不报告。现在先跳过并计入 `IrreparableStretchEdges`
+- **`ClothParameters.Validate()` 现在真的检查 `substeps` / `iterations` / `maxDeltaTime`**（以前一个都没查）；运行期另有兜底：
+  `Step()` 把两个整数钳到 ≥1、`dt` 钳到上限，手填 0 的代价是"只多跑一遍"，不是除零或静默冻结
+
+### 文档更正
+- 流体：模拟在组件**局部空间**，渲染时乘 `localToWorld`；初始采样只有**盒 / 球 / 溃坝**三种；求解器是密度约束投影 + `clampTensileLambda` 拉力钳制 + `complianceAlpha` 柔度项 + XSPH 黏度 + 涡度约束。此前 README 与发布说明把采样写成四种、把求解器写成带一项额外的密度修正，两者都不存在
+- 布料限幅轮数：**16**（不是 32）；`substeps` / `iterations` / `maxDeltaTime` 现在由 `Validate()` 检查（旧版没查）
+- 测试总数：**344**（旧的计数口径偏小；命名空间级过滤器返回 316 是旧子集）
+
+### Notes
+- **粒接触是刻意的、经过实测的限制**：接触按"点对对方的球"判定，所以触发距离是**对方半径 + skin**，不是 `r_A + r_B`；两个表面要先互相吃进去大约半个质点间距才有反应。`cloudRadiusFactor = 0.25`（间距 0.2）时球云是透的，360 步内**完全没接触**（最近距离冻在 0.080 m、速度精确为 0）。加密网格才是解法：细分 3 → 6 把间距 0.228 砍到 0.114
+- **等重的两个体堆不住，轻压重可以**：四档刚度配方跑下来，等重对最终都并排躺在地上（最近球心距 0.58–0.91 m），因为顺序投影谁也不让谁、退出方向带侧向分量；演示里布被果冻托着成立，是因为只有布的质点能动
+- **"每次查询最多补 25%"的限幅实现过、实测无效、已撤回**：深互插（0.18 m ≈ 一个质点间距）的一次性回弹总平移 4.61 m（系数 0.5），每 60 步 1.03 → 0.18 m，是衰减的不是发散；限幅把它改成 4.15 m，系数 0.75 反而从 4.53 变 5.65 m。弹性能存在弹簧与体积约束里，不在单次投影距离里。演示改成面间隙 0.06 m 起手（仍在 0.105 m 判定距离之内）
+- **刚硬配方实测**（0.6 m 方块落地板、420 步、质心高度）：`volumeStiffness` 4000 → 40000 时，细分 6 从 0.02 m 抬到 0.16 m，细分 3 从 0.11 m 抬到 0.30 m。刚度上去必须同时加 `substeps`，否则显式积分发散到 NaN
+
+
 ## [1.5.0] - 2026-10-06
 
 ### Added

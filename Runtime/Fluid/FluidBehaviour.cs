@@ -177,20 +177,14 @@ namespace PhysicsSimulation
 
         void OnDestroy()
         {
-            DisposeAsset(_particleMesh); _particleMesh = null;
-            DisposeAsset(_particleMaterial); _particleMaterial = null;
-            DisposeAsset(_surfaceMesh); _surfaceMesh = null;
+            RuntimeAssets.Dispose(_particleMesh); _particleMesh = null;
+            RuntimeAssets.Dispose(_particleMaterial); _particleMaterial = null;
+            RuntimeAssets.Dispose(_surfaceMesh); _surfaceMesh = null;
+            // 曾经漏了这一项：水面材质是 FluidSurfaceMaterial.Create 运行时 new 出来的，
+            // 不释放就跟着场景驻留（来回切 Surface 渲染会一直涨）。
+            RuntimeAssets.Dispose(_surfaceMaterial); _surfaceMaterial = null;
         }
 
-        /// <summary>回收运行时自建的资源。EditMode 里 <c>Destroy</c> 会打一条 Error，而 Unity 的
-        /// 测试框架把任何未预期的 Error 直接算成测试失败；水面重建在 EditMode 一帧里就会被走好几次，
-        /// 两个测试就是这样变红的。运行时用 Destroy、编辑器里用 DestroyImmediate。</summary>
-        static void DisposeAsset(UnityEngine.Object asset)
-        {
-            if (asset == null) return;
-            if (Application.isPlaying) Destroy(asset);
-            else DestroyImmediate(asset);
-        }
 
         /// <summary>按当前参数与初始形状重建粒子集（会丢掉当前模拟状态）。</summary>
         public void Rebuild()
@@ -209,18 +203,7 @@ namespace PhysicsSimulation
                 _initialVelocities = (Vector3[])set.Velocities.Clone();
 
                 var simulation = new FluidSimulation(parameters, set);
-                simulation.SetSimulationToWorld(transform.localToWorldMatrix);
-                if (collideWithSceneColliders && sceneColliders != null && sceneColliders.Count > 0)
-                    ColliderProxies.RefreshInto(sceneColliders, simulation.Collisions);
-
-                // 容器必须在 Rebuild 里加：Rebuild 会换一个全新的 FluidSimulation（连带全新的
-                // CollisionSet），从外面往 Simulation.Collisions 塞的东西第二次 Rebuild（比如
-                // 进 Play 模式）就没了 —— 实测：手工挂的容器代理在 Play 里变成"碰撞代理 0"，
-                // 一箱水直落到 y = −92，动能 16904，
-                if (enableBoxContainer)
-                    simulation.Collisions.Add(new BoxContainerProxy(containerCenter, containerHalfSize,
-                                                                    Quaternion.identity),
-                                              CollisionProxySpace.World);
+                WireSimulation(simulation);
 
                 _simulation = simulation;
                 LastBuildError = null;
@@ -241,7 +224,11 @@ namespace PhysicsSimulation
                 case FluidVolumeShape.DamBreak:
                     return FluidVolume.DamBreak(volumeSize.x, volumeSize.y, volumeSize.z, d);
                 case FluidVolumeShape.Sphere:
-                    return FluidVolume.Sphere(transform.localPosition, volumeRadius, d);
+                    // 模拟空间就是组件自身的局部空间（见类注释），所以球心恒为原点。
+                    // 曾经传的是 transform.localPosition：组件在父级 (3,0,0) 时，
+                    // 球被生成在局部 (3,0,0)（世界 (6,0,0)），水凭空漂到别处。
+                    // 盒与溃坝都是从原点生成的，只有球这一支漏了。
+                    return FluidVolume.Sphere(Vector3.zero, volumeRadius, d);
                 default:
                     return FluidVolume.Box(volumeSize, d);
             }
@@ -268,10 +255,30 @@ namespace PhysicsSimulation
                 Velocities = (Vector3[])_initialVelocities.Clone(),
                 Count = _initialPositions.Length
             };
-            _simulation = new FluidSimulation(parameters, set);
-            _simulation.SetSimulationToWorld(transform.localToWorldMatrix);
+            var simulation = new FluidSimulation(parameters, set);
+            WireSimulation(simulation);
+            _simulation = simulation;
+        }
+
+        /// <summary>
+        /// 把一个新建的求解器接到场景上。**Rebuild 与 ResetToInitialLayout 必须共用它。**
+        ///
+        /// 每次新建 <see cref="FluidSimulation"/> 都会连带一个全新的 <see cref="CollisionSet"/>，
+        /// 所以"从外面往 Simulation.Collisions 塞代理"这种写法在任何重建路径上都会蒸发。
+        /// 这个坑踩了两次：第一次是 Rebuild（手工挂的容器在 Play 里变成碰撞代理 0，
+        /// 一箱水直落到 y = -92、动能 16904），第二次是 ResetToInitialLayout 只接回了
+        /// 场景 Collider、把容器漏了 —— 演示里的"重来一次"直接让水落出世界。
+        /// </summary>
+        void WireSimulation(FluidSimulation simulation)
+        {
+            simulation.SetSimulationToWorld(transform.localToWorldMatrix);
             if (collideWithSceneColliders && sceneColliders != null && sceneColliders.Count > 0)
-                ColliderProxies.RefreshInto(sceneColliders, _simulation.Collisions);
+                ColliderProxies.RefreshInto(sceneColliders, simulation.Collisions);
+
+            if (enableBoxContainer)
+                simulation.Collisions.Add(new BoxContainerProxy(containerCenter, containerHalfSize,
+                                                                Quaternion.identity),
+                                          CollisionProxySpace.World);
         }
 
         /// <summary>
@@ -322,7 +329,7 @@ namespace PhysicsSimulation
 
             FluidSurfaceMesh surface = FluidSurface.Build(positions, positions.Length, cell, kernel,
                                                           spacing, iso, budget, kernel);
-            DisposeAsset(_surfaceMesh);
+            RuntimeAssets.Dispose(_surfaceMesh);
             _surfaceMesh = FluidSurface.ToMesh(surface);
             _surfaceMesh.hideFlags = HideFlags.DontSave;                // 运行时资源，不进场景也不进包
 
@@ -395,7 +402,7 @@ namespace PhysicsSimulation
         {
             if (_particleMesh == null || _particleMeshRadius <= 0f || Mathf.Abs(_particleMeshRadius - radius) > radius * 0.25f)
             {
-                DisposeAsset(_particleMesh);
+                RuntimeAssets.Dispose(_particleMesh);
                 _particleMesh = FluidParticleMesh.Build(radius, 1);
                 _particleMesh.hideFlags = HideFlags.DontSave;     // 运行时生成的东西，不进场景也不进包体资源
                 _particleMeshRadius = radius;

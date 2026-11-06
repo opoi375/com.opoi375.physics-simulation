@@ -185,8 +185,12 @@ namespace PhysicsSimulation
             RefreshKernels();                       // 有人中途改了 kernelRadius 也要跟得上
             // 秒级 dt（进 Play 第一帧 / 卡帧）必须钳住：子步长直接进重力积分与密度投影，
             // 不钳的话一帧就能把水甩到几百米外，之后再也回不来。
-            float subStep = p.ClampDeltaTime(deltaTime) / p.substeps;
-            for (int s = 0; s < p.substeps; s++) Substep(subStep, p);
+            // 用 EffectiveXxx 而不是裸字段：Validate() 只在构造/重建时跑，
+            // 而 Inspector 上的 parameters 是同一个被引用的对象 —— 运行期改成 0 不会经过它。
+            // 裸除的话 subStep = dt/0 = +Infinity，而 for (s < 0) 一次都不进 ⇒ 水整帧冻结、无异常、无日志。
+            int substeps = p.EffectiveSubsteps;
+            float subStep = p.ClampDeltaTime(deltaTime) / substeps;
+            for (int s = 0; s < substeps; s++) Substep(subStep, p);
 
             // 位置定下来了，把邻居表与密度对齐到当前位置，外部读到的诊断量才不会是"求解中途的"
             _search.Build(_position, _count, p.kernelRadius);
@@ -242,7 +246,8 @@ namespace PhysicsSimulation
             Vector3[] deltaLambda = _deltaLambda;
             FluidKernelSet k = _k;                            // struct 拷进局部变量，循环里就是纯值访问
 
-            for (int iteration = 0; iteration < p.solverIterations; iteration++)
+            int iterations = p.EffectiveSolverIterations;
+            for (int iteration = 0; iteration < iterations; iteration++)
             {
                 // 5a. 密度 → C → Δλ（密度与梯度共用同一趟邻居遍历，别再走第二遍）
                 for (int i = 0; i < _count; i++)

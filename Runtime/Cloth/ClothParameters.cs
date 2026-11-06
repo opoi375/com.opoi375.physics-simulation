@@ -42,53 +42,69 @@ namespace PhysicsSimulation
     [Serializable]
     public sealed class ClothParameters
     {
+        [RequiresRebuild("网格与约束表在构造时按行列数分配")]
         [Tooltip("网格列数（X 方向的质点数），至少 2")]
         public int columns = 16;
 
+        [RequiresRebuild("网格与约束表在构造时按行列数分配")]
         [Tooltip("网格行数（Y 方向的质点数），至少 2")]
         public int rows = 16;
 
+        [RequiresRebuild("BuildConstraints 用间距算原长")]
         [Tooltip("相邻质点的初始间距（米），必须为正")]
         public float spacing = 0.1f;
 
+        [RequiresRebuild("逆质量在构造时算好一份，SetPinned 复用它")]
         [Tooltip("每个质点的质量（千克）")]
         public float mass = 1f;
 
+        [RuntimeTunable]
         [Tooltip("模拟重力（米/秒²）")]
         public Vector3 gravity = new Vector3(0f, -9.81f, 0f);
 
+        [RuntimeTunable]
         [Tooltip("速度衰减（1/秒），写成除数 (1 + d*dt)，永远不会把速度反号")]
         public float damping = 0.05f;
 
+        [RuntimeTunable]
         [Tooltip("结构约束硬度 [0,1]")]
         public float structuralStiffness = 1f;
 
+        [RuntimeTunable]
         [Tooltip("剪切约束硬度 [0,1]")]
         public float shearStiffness = 0.6f;
 
+        [RuntimeTunable]
         [Tooltip("弯曲约束硬度 [0,1]")]
         public float bendStiffness = 0.2f;
 
+        [RuntimeTunable]
         [Tooltip("是否启用剪切约束")]
         public bool enableShear = true;
 
+        [RuntimeTunable]
         [Tooltip("是否启用弯曲约束")]
         public bool enableBend = true;
 
+        [RuntimeTunable]
         [Tooltip("一个时间步内均分成多少子步（每子步都做一次完整投影）")]
         [Min(1)]
         public int substeps = 4;
 
+        [RuntimeTunable]
         [Tooltip("每个子步内的约束投影迭代次数")]
         [Min(1)]
         public int iterations = 2;
 
+        [RuntimeTunable]
         [Tooltip("单步 dt 上限（秒）")]
         public float maxDeltaTime = 1f / 15f;
 
+        [RuntimeTunable]
         [Tooltip("拉伸上限比：任何约束的长度不得超过 restLength * 该值（兜底，防炸）")]
         public float maxStretchRatio = 2f;
 
+        [RuntimeTunable]
         [Tooltip("碰撞厚度（米）：质点被推到障碍物表面外多远，相当于给布一层“皮毛”，避免穿模与抖动")]
         public float collisionThickness = 0.01f;
 
